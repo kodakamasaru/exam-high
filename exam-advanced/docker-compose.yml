@@ -38,11 +38,25 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:8080"
+      API_URL: "http://backend:8080"
       TZ: Asia/Tokyo
     command: sh -c "pnpm install --frozen-lockfile && pnpm dev"
     depends_on:
       - backend
+
+  tests:
+    build: ./tests
+    volumes:
+      - ./tests:/app
+    environment:
+      API_URL: "http://frontend:3000/api"
+      FRONTEND_URL: "http://frontend:3000"
+      TZ: Asia/Tokyo
+    depends_on:
+      - frontend
+    entrypoint: ["sh", "-c", "pnpm install --no-frozen-lockfile && exec \"$$@\"", "--"]
+    profiles:
+      - test
 
 volumes:
   pgdata:

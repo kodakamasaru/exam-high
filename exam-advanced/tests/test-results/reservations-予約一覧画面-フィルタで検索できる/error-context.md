@@ -1,0 +1,43 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - link "予約登録" [ref=e3] [cursor=pointer]:
+    - /url: /reservations/new
+  - text: "|"
+  - link "予約一覧" [ref=e4] [cursor=pointer]:
+    - /url: /reservations
+  - separator [ref=e5]
+  - heading "予約一覧" [level=1] [ref=e6]
+  - paragraph [ref=e7]:
+    - text: リソース：
+    - generic [ref=e8]:
+      - radio "会議室A" [ref=e9]
+      - text: 会議室A
+    - generic [ref=e10]:
+      - radio "会議室B" [checked] [ref=e11]
+      - text: 会議室B
+    - generic [ref=e12]:
+      - radio "会議室C" [ref=e13]
+      - text: 会議室C
+    - button "検索" [active] [ref=e14]
+  - table [ref=e15]:
+    - rowgroup [ref=e16]:
+      - row "イベント名 開始 終了" [ref=e17]:
+        - columnheader "イベント名" [ref=e18]
+        - columnheader "開始" [ref=e19]
+        - columnheader "終了" [ref=e20]
+    - rowgroup [ref=e21]:
+      - row "チームMTG 2030/01/15 19:00 2030/01/15 20:00" [ref=e22]:
+        - cell "チームMTG" [ref=e23]
+        - cell "2030/01/15 19:00" [ref=e24]
+        - cell "2030/01/15 20:00" [ref=e25]
+      - row "1on1 2030/01/15 22:00 2030/01/15 23:00" [ref=e26]:
+        - cell "1on1" [ref=e27]
+        - cell "2030/01/15 22:00" [ref=e28]
+        - cell "2030/01/15 23:00" [ref=e29]
+  - paragraph [ref=e30]:
+    - button "前へ" [disabled] [ref=e31]
+    - text: 1 / 1
+    - button "次へ" [disabled] [ref=e32]
+```

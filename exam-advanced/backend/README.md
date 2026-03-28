@@ -1,7 +1,10 @@
 # API仕様
 
 ## 共通
-- 日時はすべて **UTC**（ISO 8601形式。例: `2030-01-15T10:00:00Z`）
+- 日時はすべて **JST**（タイムゾーン省略。例: `2030-01-15T10:00:00`）
+- 予約IDの形式は自由（UUID、連番、プレフィックス付き等）
+- エラーレスポンスの `error` フィールドは仕様通りの値を返すこと。`message` フィールドの文言は自由
+- DB接続情報は環境変数 `DATABASE_URL` で提供されます（例: `postgresql://postgres:postgres@db:5432/reservation`）
 
 ## POST /reservations
 予約を登録する。同一リソースの時間重複（日付またぎ含む）は409で拒否。
@@ -11,8 +14,8 @@
 {
   "resource_id": "room-a",
   "event_name": "チームMTG",
-  "start": "2030-01-15T10:00:00Z",
-  "end": "2030-01-15T11:00:00Z"
+  "start": "2030-01-15T10:00:00",
+  "end": "2030-01-15T11:00:00"
 }
 ```
 
@@ -20,8 +23,8 @@
 |---|---|---|---|
 | resource_id | string | Yes | リソースID（room-a, room-b, room-c のいずれか） |
 | event_name | string | Yes | イベント名 |
-| start | ISO 8601 datetime | Yes | 開始日時（UTC） |
-| end | ISO 8601 datetime | Yes | 終了日時（UTC） |
+| start | datetime | Yes | 開始日時（JST、タイムゾーン省略。例: `2030-01-15T10:00:00`） |
+| end | datetime | Yes | 終了日時（同上） |
 
 ### バリデーション
 - 全フィールド必須
@@ -37,9 +40,9 @@
   "id": "rsv-456",
   "resource_id": "room-a",
   "event_name": "チームMTG",
-  "start": "2030-01-15T10:00:00Z",
-  "end": "2030-01-15T11:00:00Z",
-  "created_at": "2030-01-10T12:00:00Z"
+  "start": "2030-01-15T10:00:00",
+  "end": "2030-01-15T11:00:00",
+  "created_at": "2030-01-10T12:00:00"
 }
 ```
 
@@ -70,8 +73,8 @@
 {
   "resource_id": "room-a",
   "event_name": "夜間作業",
-  "start": "2030-01-15T22:00:00Z",
-  "end": "2030-01-16T02:00:00Z"
+  "start": "2030-01-15T22:00:00",
+  "end": "2030-01-16T02:00:00"
 }
 ```
 
@@ -88,8 +91,8 @@
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |---|---|---|---|---|
 | resource_id | string | Yes | - | リソースID |
-| from | ISO 8601 datetime | No | 現在日時 | 検索開始日時 |
-| to | ISO 8601 datetime | No | なし（from以降すべて） | 検索終了日時 |
+| from | datetime | No | 現在日時 | 検索開始日時。`start` がこの値以降の予約を返す |
+| to | datetime | No | なし（from以降すべて） | 検索終了日時。`start` がこの値より前の予約を返す |
 | page | integer | No | 1 | ページ番号 |
 | limit | integer | No | 20 | 1ページあたりの件数 |
 
@@ -106,9 +109,9 @@
       "id": "rsv-456",
       "resource_id": "room-a",
       "event_name": "チームMTG",
-      "start": "2030-01-15T10:00:00Z",
-      "end": "2030-01-15T11:00:00Z",
-      "created_at": "2030-01-10T12:00:00Z"
+      "start": "2030-01-15T10:00:00",
+      "end": "2030-01-15T11:00:00",
+      "created_at": "2030-01-10T12:00:00"
     }
   ],
   "pagination": {

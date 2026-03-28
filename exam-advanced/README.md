@@ -19,7 +19,6 @@
 ### 必要なもの
 
 - Docker Desktop
-- Node.js v18以上
 - Git
 
 ### 起動
@@ -33,8 +32,36 @@ docker compose up
 | サービス | URL / 接続先 |
 |---|---|
 | フロントエンド | http://localhost:3000 |
-| バックエンドAPI | http://localhost:8080 |
+| バックエンドAPI | http://localhost:3000/api（フロントエンド経由でプロキシ） |
+| バックエンドAPI（直接） | http://localhost:8080 |
 | PostgreSQL | localhost:5432（DB名: `reservation` / ユーザー: `postgres` / パスワード: `postgres`） |
+
+フロントエンドからAPIを呼ぶ際は `/api/reservations` のように相対パスを使ってください。
+`next.config.ts` のrewritesで `http://backend:8080` に転送されます。
+
+### パッケージの追加
+
+ORM等のパッケージを追加する場合は、コンテナ内で `pnpm add` を実行してください。
+
+```bash
+# 例: backendにprismaを追加
+docker compose exec backend pnpm add prisma @prisma/client
+```
+
+追加後、Dockerを再ビルドしてください。
+
+```bash
+docker compose up --build
+```
+
+### DB初期化
+
+DBの状態をリセットしたい場合は、以下のコマンドでボリュームごと削除してから再起動してください。
+
+```bash
+docker compose down -v
+docker compose up
+```
 
 ## 課題の進め方
 
@@ -44,8 +71,8 @@ docker compose up
 
 | ドキュメント | 内容 |
 |---|---|
-| [api-spec/README.md](api-spec/README.md) | API仕様（2エンドポイント） |
-| [FRONTEND.md](FRONTEND.md) | フロントエンド仕様（2画面 + data-testid） |
+| [backend/README.md](backend/README.md) | API仕様（2エンドポイント） |
+| [frontend/README.md](frontend/README.md) | フロントエンド仕様（2画面 + data-testid） |
 
 #### 実装するAPI
 
@@ -63,7 +90,7 @@ docker compose up
 
 #### リソース一覧（固定）
 
-以下のリソースが利用可能です。フロントエンドのセレクトに表示してください。
+以下のリソースが利用可能です。フロントエンドで選択肢として表示してください。
 
 | resource_id | 名前 |
 |---|---|
@@ -76,20 +103,32 @@ docker compose up
 - ディレクトリ構造・アーキテクチャは自由です
 - API仕様は**変更不可**
 - data-testid仕様は**変更不可**
-- 日時: API仕様とフロントエンド仕様をそれぞれ参照
 - デザイン・CSS・レイアウトは自由（採点対象外）
+- `docker compose up` だけで、DB準備を含めてアプリケーションが使える状態になること
+- フロントエンドからAPIを呼ぶ際は `/api/reservations` のように相対パスを使うこと
 
 ### ステップ3: セルフチェックする
 
 APIテストとE2Eテストを提供しています。
 **提出前に必ず通ることを確認してください。通らない場合、採点対象外となります。**
 
+アプリケーションが起動した状態（`docker compose up`）で、別ターミナルから実行してください。
+
 ```bash
 # APIテスト
-cd tests && pnpm install && pnpm test:api
+docker compose run --rm tests pnpm test:api
 
 # E2Eテスト
-cd tests && pnpm test:e2e
+docker compose run --rm tests pnpm test:e2e
+```
+
+テストを再実行する場合は、事前にDB初期化を行ってください。
+
+```bash
+docker compose down -v
+docker compose up -d
+# 起動を待ってからテスト実行
+docker compose run --rm tests pnpm test:api
 ```
 
 ### ステップ4: ADRを書く
@@ -108,7 +147,7 @@ cd tests && pnpm test:e2e
 
 ### 必須
 
-- ✅ `docker compose up` で起動可能
+- ✅ `docker compose up` だけでDB準備を含めてアプリケーションが使える状態になること
 - ✅ セルフチェック（APIテスト・E2Eテスト）が通ること
 - ✅ `adr/backend-architecture.md` と `adr/frontend-architecture.md` が記入されていること
 
@@ -121,32 +160,30 @@ cd tests && pnpm test:e2e
 
 ```
 exam-advanced/
-├── README.md                    # このファイル
-├── FRONTEND.md                  # フロントエンド仕様
-├── api-spec/
-│   └── README.md                # API仕様
+├── README.md                      # このファイル
 ├── backend/
+│   ├── README.md                  # API仕様
 │   ├── Dockerfile
-│   ├── package.json             # Hono + TypeScript
+│   ├── package.json               # Hono + TypeScript
 │   ├── tsconfig.json
 │   └── src/
-│       └── index.ts             # エントリポイント（ヘルスチェックのみ実装済み）
+│       └── index.ts               # エントリポイント（ヘルスチェックのみ実装済み）
 ├── frontend/
+│   ├── README.md                  # フロントエンド仕様
 │   ├── Dockerfile
-│   ├── package.json             # Next.js
+│   ├── package.json               # Next.js
 │   ├── tsconfig.json
 │   ├── next.config.ts
-│   └── app/                     # 静的HTML（参考用。動的ロジックは未実装）
-│       ├── layout.tsx
-│       ├── page.tsx
-│       └── reservations/
-│           ├── page.tsx          # 予約一覧
-│           └── new/
-│               └── page.tsx     # 予約登録
+│   └── app/                       # 参考用画面（動的ロジックは未実装）
+├── tests/
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── api/                       # APIテスト
+│   └── e2e/                       # E2Eテスト
 ├── adr/
-│   ├── backend-architecture.md   # バックエンドADR（必須）
-│   └── frontend-architecture.md  # フロントエンドADR（必須）
-├── docker-compose.yml           # BE + FE + DB
+│   ├── backend-architecture.md    # バックエンドADR（必須）
+│   └── frontend-architecture.md   # フロントエンドADR（必須）
+├── docker-compose.yml             # BE + FE + DB + tests
 └── pnpm-workspace.yaml
 ```
 
@@ -160,3 +197,5 @@ exam-advanced/
 - Dockerが起動しない → Docker Desktopが起動しているか確認してください
 - ポートが使えない → 他のアプリケーションが3000/8080/5432を使用している可能性があります
 - セルフチェックが通らない → API仕様・data-testid仕様を再確認してください
+- パッケージ追加後にDockerが動かない → `docker compose up --build` で再ビルドしてください
+- テスト2回目以降で失敗する → `docker compose down -v && docker compose up` でDB初期化してください
