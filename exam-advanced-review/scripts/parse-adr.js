@@ -46,10 +46,11 @@ function parseAdr(filepath) {
 
       if (cells.length >= 3) {
         const [name, modulePath, responsibility] = cells;
-        if (name && modulePath && !name.startsWith("（")) {
+        // テンプレートの例示行やヘッダーをスキップ
+        if (name && modulePath && !name.startsWith("（") && !name.startsWith("例")) {
           modules.push({
             name,
-            path: modulePath,
+            path: modulePath.replace(/`/g, "").trim(),
             responsibility,
           });
         }

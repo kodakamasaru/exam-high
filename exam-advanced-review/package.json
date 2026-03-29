@@ -1,0 +1,26 @@
+{
+  "name": "exam-advanced-review",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "score": "node scripts/score.js"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@next/eslint-plugin-next": "^16.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "dependency-cruiser": "^16.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-n": "^17.0.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-security": "^3.0.0",
+    "eslint-plugin-sonarjs": "^4.0.2",
+    "jscpd": "^4.0.0",
+    "madge": "^8.0.0",
+    "type-coverage": "^2.29.0",
+    "typescript": "^6.0.0"
+  }
+}

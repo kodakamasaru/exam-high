@@ -12,7 +12,6 @@
 | 5 | 依存方向 | 小 | dependency-cruiser | 極低 | 厚め | 絶対数（0が理想） |
 | 6 | Next.js / React ベストプラクティス | 小 | @next/eslint-plugin-next + react + react-hooks + jsx-a11y | 低 | 薄め | 相対数（1k行あたり） |
 | 7 | Lighthouse | 小 | Lighthouse CI | ゼロ | 薄め | スコア値 |
-| 8 | バンドルサイズ | 小 | size-limit | ゼロ | 薄め | 連続値 |
 
 ---
 
