@@ -22,6 +22,7 @@ make e2e-test                  # 【足切り】Playwright（pass/fail）
 ├─ make arch-test              # アーキテクチャ品質（ADR解析 + 循環依存 + 外部依存集中度 + 双方向依存）
 ├─ make type-check             # 型安全性（tsc + type-coverage + ESLint）
 ├─ make lint                   # コード品質（ESLint recommended + security + n）
+├─ make code-structure         # コード構造（平均関数長・平均ファイル長）
 ├─ make duplication-check      # コード重複（jscpd）
 ├─ make security-test          # セキュリティ（Bearer）
 ├─ make load-test              # パフォーマンス（k6）
@@ -63,6 +64,7 @@ reports/
   type-coverage.json        ← type-coverage（型カバレッジ）
   type-lint.json            ← ESLint @typescript-eslint（any/unsafe）
   lint.json                 ← ESLint recommended + security + n（コード品質）
+  code-structure-backend.json ← カスタムスクリプト（平均関数長・平均ファイル長）
   jscpd-backend.json        ← jscpd（コード重複）
   security.json             ← Bearer（セキュリティ）
   perf.json                 ← k6（パフォーマンス）
@@ -72,6 +74,7 @@ reports/
   frontend-deps.json        ← dependency-cruiser（依存方向）
   frontend-type-coverage.json ← type-coverage（型カバレッジ）
   frontend-lint.json        ← ESLint（コード品質）
+  code-structure-frontend.json ← カスタムスクリプト（平均関数長・平均ファイル長）
   jscpd-frontend.json       ← jscpd（コード重複）
   lighthouse.json           ← Lighthouse CI（Performance/A11y/BP）
   bundle-size.json          ← size-limit / next build（バンドルサイズ）

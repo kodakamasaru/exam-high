@@ -25,7 +25,14 @@
 
 ## data-testid仕様
 
-E2Eテストで使用します。以下のdata-testidを必ず付与してください（**変更不可**）。
+E2Eテストでは、HTML要素の `data-testid` 属性を使って要素を特定します。
+以下のdata-testidを該当する要素に必ず付与してください（**変更不可**）。
+
+```html
+<!-- 例 -->
+<button data-testid="submit-button">登録</button>
+```
+
 実際の画面イメージは `app/reservations/` 配下の参考用画面を参照してください。
 
 ### `/reservations/new` — 予約登録画面

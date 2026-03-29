@@ -2,18 +2,18 @@
 
 ## 評価軸一覧
 
-| # | 軸 | 配点 | ツール | 誤検知 | 重み |
-|---|---|---|---|---|---|
-| 1 | アーキテクチャ品質 | 大 | madge + dependency-cruiser | 極低 | 厚め |
-|   | （ADR宣言ベースの依存違反 + 循環依存） | | | | |
-| 2 | 型安全性 | 大 | tsc + type-coverage + ESLint | 極低〜低 | 厚め |
-|   | （Honoの型安全ルーティングの活用度もここで差が出る） | | | | |
-| 3 | コード品質 | 中 | ESLint (recommended) + eslint-plugin-security + eslint-plugin-n | 低 | 厚め |
-| 4 | コード重複 | 中 | jscpd | ほぼゼロ | 厚め |
-| 5 | セキュリティ | 小 | Bearer | 低 | 薄め |
-| 6 | パフォーマンス | 小 | k6 | ゼロ | 薄め |
-
-メモ: 拡張性0で小さくまとまってると結果的に高得点になっちゃいそう=>そういうケースは面接のときに落とす
+| # | 軸 | 配点 | ツール | 誤検知 | 重み | スコア方式 |
+|---|---|---|---|---|---|---|
+| 1 | アーキテクチャ品質 | 大 | madge + dependency-cruiser | 極低 | 厚め | 絶対数（0が理想） |
+|   | （ADR宣言ベースの依存違反 + 循環依存） | | | | | |
+| 2 | 型安全性 | 大 | tsc + type-coverage + ESLint | 極低〜低 | 厚め | type-coverageは% |
+|   | （Honoの型安全ルーティングの活用度もここで差が出る） | | | | | |
+| 3 | コード品質 | 中 | ESLint (recommended) + security + n | 低 | 厚め | 相対数（1k行あたり） |
+| 4 | コード構造 | 中 | カスタムスクリプト | ゼロ | 厚め | 平均値 |
+|   | （平均関数長 + 平均ファイル長） | | | | | |
+| 5 | コード重複 | 中 | jscpd | ほぼゼロ | 厚め | 重複率% |
+| 6 | セキュリティ | 小 | Bearer | 低 | 薄め | 相対数（1k行あたり） |
+| 7 | パフォーマンス | 小 | k6 | ゼロ | 薄め | 連続値 |
 
 ---
 
@@ -161,13 +161,50 @@ npx eslint src/ --ext .ts \
 ```
 
 ### スコア
+コード量が多い受験者が不利にならないよう、1000行あたりの違反数で算出。
 ```
-score = MAX_SCORE - (total_errors × W_lint_error) - (total_warnings × W_lint_warn)
+errors_per_1k = total_errors / total_lines * 1000
+warnings_per_1k = total_warnings / total_lines * 1000
+score = MAX_SCORE - (errors_per_1k × W_lint_error) - (warnings_per_1k × W_lint_warn)
 ```
 
 ---
 
-## 4. コード重複
+## 4. コード構造
+
+### 目的
+適切にコードが分割されているかを測定。ベタ書きよりもコンポーネント・関数分割している方が高スコア。
+
+### 指標
+- **平均関数長**（行数）: 短いほど高スコア
+- **平均ファイル長**（行数）: 短いほど高スコア
+
+### ツール
+カスタムスクリプト（TSファイルをパースして関数・ファイルの行数を集計）
+
+### コマンド
+```bash
+node scripts/calc-code-structure.js src/ > reports/code-structure.json
+```
+
+### 出力例
+```json
+{
+  "avgFunctionLength": 15,
+  "avgFileLength": 85,
+  "totalFiles": 24,
+  "totalFunctions": 48
+}
+```
+
+### スコア
+```
+score = W_func / avgFunctionLength + W_file / avgFileLength
+```
+
+---
+
+## 5. コード重複
 
 ### 目的
 コピペコードの検出
@@ -187,7 +224,7 @@ score = MAX_SCORE - (duplication_percentage × W_duplication)
 
 ---
 
-## 5. セキュリティ
+## 6. セキュリティ
 
 ### 目的
 既知の脆弱性の検出（データフロー解析ベース）
@@ -212,12 +249,14 @@ docker run --rm \
 
 ### スコア
 ```
-score = MAX_SCORE - (critical_count × W_sec_critical) - (high_count × W_sec_high) - (medium_count × W_sec_medium)
+critical_per_1k = critical_count / total_lines * 1000
+high_per_1k = high_count / total_lines * 1000
+score = MAX_SCORE - (critical_per_1k × W_sec_critical) - (high_per_1k × W_sec_high)
 ```
 
 ---
 
-## 6. パフォーマンス
+## 7. パフォーマンス
 
 ### 目的
 大量データでのAPI応答性能

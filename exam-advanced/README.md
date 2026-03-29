@@ -14,6 +14,38 @@
 | ORM | 自由 |
 | その他 | 自由（Redis等、必要に応じて追加可） |
 
+## 想定システム要件
+
+以下の規模での運用を想定して設計・実装してください。
+
+| 項目 | 想定値 |
+|---|---|
+| リソース数 | 数千 |
+| 日次予約件数 | 数万件 |
+| 総予約データ量 | 数千万件 |
+| 同時アクセス数 | 数千 |
+
+### 自由な点
+- ディレクトリ構造・アーキテクチャ
+- ORM・ライブラリの選定・追加
+- 各種configファイル（tsconfig.json、eslint設定等）の変更・追加
+- Dockerfileの変更
+- ブランチ戦略
+- PR / Issueの運用（使用しなくても構いません）
+- デザイン・CSS・レイアウト（見た目は採点対象外。保守性・拡張性を意識したコンポーネント設計は評価対象）
+
+### 禁止事項
+- フレームワーク（Hono / Next.js）の変更
+- データベース（PostgreSQL）の変更
+- docker-compose.yml の変更
+- テストコード（tests/）の変更
+- API仕様（エンドポイント・リクエスト/レスポンス形式）の変更
+- data-testid仕様の変更
+
+### その他
+- 仕様に記載されていない機能（ユーザー認証等）の実装は不要
+- ただし、今後大きく機能拡張が行われるという想定で設計すること
+
 ## 環境構築
 
 ### 必要なもの
@@ -23,11 +55,11 @@
 
 ### 起動
 
-以下のコマンドでアプリケーション全体（バックエンド + フロントエンド + DB）が起動します。
-
 ```bash
 docker compose up
 ```
+
+バックエンド・フロントエンド・DBが起動します。
 
 | サービス | URL / 接続先 |
 |---|---|
@@ -36,38 +68,47 @@ docker compose up
 | バックエンドAPI（直接） | http://localhost:8080 |
 | PostgreSQL | localhost:5432（DB名: `reservation` / ユーザー: `postgres` / パスワード: `postgres`） |
 
-フロントエンドからAPIを呼ぶ際は `/api/reservations` のように相対パスを使ってください。
-`next.config.ts` のrewritesで `http://backend:8080` に転送されます。
+### DBセットアップ
+
+`backend/package.json` の `init` スクリプトにDBマイグレーション処理を実装してください。
+起動後、以下のコマンドでセットアップを実行します。
+
+```bash
+docker compose exec backend pnpm init
+```
 
 ### パッケージの追加
 
-ORM等のパッケージを追加する場合は、コンテナ内で `pnpm add` を実行してください。
+コンテナ内で `pnpm add` を実行してください。
 
 ```bash
 # 例: backendにprismaを追加
 docker compose exec backend pnpm add prisma @prisma/client
 ```
 
-追加後、Dockerを再ビルドしてください。
-
-```bash
-docker compose up --build
-```
-
 ### DB初期化
 
-DBの状態をリセットしたい場合は、以下のコマンドでボリュームごと削除してから再起動してください。
+DBをリセットしたい場合：
 
 ```bash
 docker compose down -v
-docker compose up
+docker compose up -d
+docker compose exec backend pnpm init
 ```
 
 ## 課題の進め方
 
-### ステップ1: 仕様を読む
+### ステップ0: リポジトリをForkしてクローンする
 
-以下の仕様書を確認してください。
+1. このリポジトリを自分のGitHubアカウントにForkする
+2. Forkしたリポジトリをクローンする
+   ```bash
+   git clone <ForkしたリポジトリのURL>
+   cd <リポジトリ名>
+   ```
+3. 作成したリポジトリに弊社アカウント（`recruit@nxted.co.jp`）を招待する
+
+### ステップ1: 仕様を読む
 
 | ドキュメント | 内容 |
 |---|---|
@@ -90,7 +131,7 @@ docker compose up
 
 #### リソース一覧（固定）
 
-以下のリソースが利用可能です。フロントエンドで選択肢として表示してください。
+フロントエンドで選択肢として表示してください。
 
 | resource_id | 名前 |
 |---|---|
@@ -100,19 +141,15 @@ docker compose up
 
 ### ステップ2: 設計・実装する
 
-- ディレクトリ構造・アーキテクチャは自由です
-- API仕様は**変更不可**
-- data-testid仕様は**変更不可**
-- デザイン・CSS・レイアウトは自由（採点対象外）
-- `docker compose up` だけで、DB準備を含めてアプリケーションが使える状態になること
-- フロントエンドからAPIを呼ぶ際は `/api/reservations` のように相対パスを使うこと
+仕様書に従って設計・実装してください。
+フロントエンドからAPIを呼ぶ際は `/api/reservations` のように相対パスを使ってください（`next.config.ts` のrewritesでバックエンドに転送されます）。
 
 ### ステップ3: セルフチェックする
 
 APIテストとE2Eテストを提供しています。
 **提出前に必ず通ることを確認してください。通らない場合、採点対象外となります。**
 
-アプリケーションが起動した状態（`docker compose up`）で、別ターミナルから実行してください。
+アプリケーションが起動・セットアップ済みの状態で、別ターミナルから実行してください。
 
 ```bash
 # APIテスト
@@ -122,14 +159,7 @@ docker compose run --rm tests pnpm test:api
 docker compose run --rm tests pnpm test:e2e
 ```
 
-テストを再実行する場合は、事前にDB初期化を行ってください。
-
-```bash
-docker compose down -v
-docker compose up -d
-# 起動を待ってからテスト実行
-docker compose run --rm tests pnpm test:api
-```
+テストを再実行する場合は、事前にDB初期化を行ってください（「DB初期化」セクション参照）。
 
 ### ステップ4: ADRを書く
 
@@ -139,63 +169,59 @@ docker compose run --rm tests pnpm test:api
 - [adr/backend-architecture.md](adr/backend-architecture.md) — バックエンド
 - [adr/frontend-architecture.md](adr/frontend-architecture.md) — フロントエンド
 
-### ステップ5: 提出する
-
-別途案内する方法で提出してください。
-
 ## 提出基準
 
 ### 必須
 
-- ✅ `docker compose up` だけでDB準備を含めてアプリケーションが使える状態になること
+- ✅ `docker compose up` → `docker compose exec backend pnpm init` でアプリケーションが使える状態になること
 - ✅ セルフチェック（APIテスト・E2Eテスト）が通ること
 - ✅ `adr/backend-architecture.md` と `adr/frontend-architecture.md` が記入されていること
 
-### 推奨
-
-- ✨ 同一リソース・同一時間帯への同時リクエストでダブルブッキングが発生しないこと
-- ✨ 大量データでもAPIが高速に応答すること
 
 ## プロジェクト構成
 
 ```
 exam-advanced/
-├── README.md                      # このファイル
+├── README.md                        # このファイル
 ├── backend/
-│   ├── README.md                  # API仕様
+│   ├── README.md                    # API仕様
 │   ├── Dockerfile
-│   ├── package.json               # Hono + TypeScript
+│   ├── package.json                 # Hono + TypeScript（initスクリプト要実装）
 │   ├── tsconfig.json
 │   └── src/
-│       └── index.ts               # エントリポイント（ヘルスチェックのみ実装済み）
+│       └── index.ts                 # エントリポイント（ヘルスチェックのみ実装済み）
 ├── frontend/
-│   ├── README.md                  # フロントエンド仕様
+│   ├── README.md                    # フロントエンド仕様
 │   ├── Dockerfile
-│   ├── package.json               # Next.js
+│   ├── package.json                 # Next.js
 │   ├── tsconfig.json
-│   ├── next.config.ts
-│   └── app/                       # 参考用画面（動的ロジックは未実装）
+│   ├── next.config.ts               # APIプロキシ設定済み
+│   └── app/                         # 参考用画面（動的ロジックは未実装）
+│       ├── layout.tsx
+│       ├── page.tsx
+│       └── reservations/
+│           ├── page.tsx             # 予約一覧
+│           └── new/
+│               └── page.tsx         # 予約登録
 ├── tests/
 │   ├── Dockerfile
 │   ├── package.json
-│   ├── api/                       # APIテスト
-│   └── e2e/                       # E2Eテスト
+│   ├── playwright.config.ts
+│   ├── api/
+│   │   └── reservations.test.ts     # APIテスト
+│   └── e2e/
+│       └── reservations.test.ts     # E2Eテスト
 ├── adr/
-│   ├── backend-architecture.md    # バックエンドADR（必須）
-│   └── frontend-architecture.md   # フロントエンドADR（必須）
-├── docker-compose.yml             # BE + FE + DB + tests
+│   ├── backend-architecture.md      # バックエンドADR（必須）
+│   └── frontend-architecture.md     # フロントエンドADR（必須）
+├── .gitignore
+├── docker-compose.yml               # BE + FE + DB + tests
 └── pnpm-workspace.yaml
 ```
-
-## 面接について
-
-提出後、選考を通過した方には面接を行います。
-面接ではADRに記載した設計判断について質問しますので、設計意図を説明できるようにしておいてください。
 
 ## 困ったときは
 
 - Dockerが起動しない → Docker Desktopが起動しているか確認してください
 - ポートが使えない → 他のアプリケーションが3000/8080/5432を使用している可能性があります
 - セルフチェックが通らない → API仕様・data-testid仕様を再確認してください
-- パッケージ追加後にDockerが動かない → `docker compose up --build` で再ビルドしてください
-- テスト2回目以降で失敗する → `docker compose down -v && docker compose up` でDB初期化してください
+- テスト再実行で失敗する → DB初期化してから再実行してください（「DB初期化」セクション参照）

@@ -2,15 +2,17 @@
 
 ## 評価軸一覧
 
-| # | 軸 | 配点 | ツール | 誤検知 | 重み |
-|---|---|---|---|---|---|
-| 1 | 型安全性 | 中 | tsc + type-coverage + ESLint | 極低〜低 | 厚め |
-| 2 | コード品質 | 中 | ESLint (recommended) | 低 | 厚め |
-| 3 | コード重複 | 中 | jscpd | ほぼゼロ | 厚め |
-| 4 | 依存方向 | 小 | dependency-cruiser | 極低 | 厚め |
-| 5 | Next.js / React ベストプラクティス | 小 | @next/eslint-plugin-next + react + react-hooks + jsx-a11y | 低 | 薄め |
-| 6 | Lighthouse | 小 | Lighthouse CI | ゼロ | 薄め |
-| 7 | バンドルサイズ | 小 | size-limit | ゼロ | 薄め |
+| # | 軸 | 配点 | ツール | 誤検知 | 重み | スコア方式 |
+|---|---|---|---|---|---|---|
+| 1 | 型安全性 | 中 | tsc + type-coverage + ESLint | 極低〜低 | 厚め | type-coverageは% |
+| 2 | コード品質 | 中 | ESLint (recommended) | 低 | 厚め | 相対数（1k行あたり） |
+| 3 | コード構造 | 中 | カスタムスクリプト | ゼロ | 厚め | 平均値 |
+|   | （平均関数長 + 平均ファイル長） | | | | | |
+| 4 | コード重複 | 中 | jscpd | ほぼゼロ | 厚め | 重複率% |
+| 5 | 依存方向 | 小 | dependency-cruiser | 極低 | 厚め | 絶対数（0が理想） |
+| 6 | Next.js / React ベストプラクティス | 小 | @next/eslint-plugin-next + react + react-hooks + jsx-a11y | 低 | 薄め | 相対数（1k行あたり） |
+| 7 | Lighthouse | 小 | Lighthouse CI | ゼロ | 薄め | スコア値 |
+| 8 | バンドルサイズ | 小 | size-limit | ゼロ | 薄め | 連続値 |
 
 ---
 

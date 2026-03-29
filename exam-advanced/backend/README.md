@@ -96,6 +96,13 @@
 | page | integer | No | 1 | ページ番号 |
 | limit | integer | No | 20 | 1ページあたりの件数 |
 
+### リクエスト例
+```
+GET /reservations?resource_id=room-a
+GET /reservations?resource_id=room-a&page=2&limit=10
+GET /reservations?resource_id=room-b&from=2030-01-15T00:00:00&to=2030-01-16T00:00:00
+```
+
 ### ソート
 `start` 昇順（近い順）固定。
 
