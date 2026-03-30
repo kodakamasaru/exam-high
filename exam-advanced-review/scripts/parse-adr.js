@@ -26,7 +26,7 @@ function parseAdr(filepath) {
     const trimmed = line.trim();
 
     // Directory Structureセクション内のテーブルを探す
-    if (trimmed.startsWith("| モジュール名")) {
+    if (trimmed.startsWith("| モジュール名") || trimmed.startsWith("| レイヤー名")) {
       inTable = true;
       continue;
     }

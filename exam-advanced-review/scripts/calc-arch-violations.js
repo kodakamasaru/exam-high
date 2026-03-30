@@ -23,11 +23,17 @@ const depcruise = JSON.parse(fs.readFileSync(depcruiseFile, "utf-8"));
 const { modules } = JSON.parse(fs.readFileSync(modulesFile, "utf-8"));
 
 // モジュール名を解決する関数
+// ディレクトリベース（src/domain/）とサフィックスベース（**/*.controller.ts）の両方に対応
 function resolveModule(filePath) {
   for (const mod of modules) {
     const modPath = mod.path.replace(/\/$/, "");
-    if (filePath.startsWith(modPath)) {
-      return mod.name;
+    if (modPath.includes("*")) {
+      // glob: **/*.controller.ts → .controller.ts で endsWith
+      const suffix = modPath.replace(/^\*+\/?\*?/, "");
+      if (filePath.endsWith(suffix)) return mod.name;
+    } else {
+      // ディレクトリ前方一致
+      if (filePath.startsWith(modPath)) return mod.name;
     }
   }
   return null;

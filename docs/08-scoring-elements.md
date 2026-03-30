@@ -1,133 +1,129 @@
-# 採点要素一覧（各100点満点）
+# 採点要素一覧（全26軸・各100点満点）
 
-## バックエンド（16項目）
+## バックエンド（17軸）
 
-### アーキテクチャ
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-01 | 循環依存数 | madge | 絶対数 | 0件 | 4件以上 |
-| BE-02 | 双方向依存数 | dependency-cruiser + ADRパーサー | 絶対数 | 0件 | 4件以上 |
-| BE-03 | 外部依存avgSpread | dependency-cruiser | 100-(avgSpread-1)*60 | 全パッケージが1ファイルに集中 | avgSpread≧2.67 |
-| BE-04 | ファイル数 | カスタムスクリプト | totalFiles/16*100 | 16ファイル以上 | 0ファイル |
-| BE-05 | 関数数 | カスタムスクリプト | totalFunctions/22*100 | 22関数以上 | 0関数 |
+### 依存関係
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `be_dep_violation` | 依存違反 | madge + dependency-cruiser + ADR | 循環依存と双方向依存の大きい方の件数×25を減点 |
+| `be_ext_spread` | 外部依存集中度 | dependency-cruiser + ADR | レイヤー単位のavgSpread。(avgSpread-1.0)×50を減点 |
+
+### 分割度
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `be_file_count` | ファイル数 | score.js内蔵 | totalFiles/10×100 |
+| `be_func_count` | 関数数 | score.js内蔵 | totalFunctions/15×100 |
 
 ### 型安全性
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-06 | 型カバレッジ | type-coverage | 非線形（二次関数 K=30） | 100% | 約82%以下 |
-| BE-07 | 型lint違反/1k行 | ESLint @typescript-eslint | 100 - errorsPer1k*5 | 0件/1k行 | 20件/1k行以上 |
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `be_type_coverage` | 型カバレッジ | type-coverage | 非線形二次関数（K=30） |
 
 ### コード品質
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-08 | ESLint error/1k行 | ESLint recommended + security + n | 100 - errorsPer1k*10 | 0件/1k行 | 10件/1k行以上 |
-| BE-09 | ESLint warn/1k行 | 同上 | 100 - warningsPer1k*3 | 0件/1k行 | 33件/1k行以上 |
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `be_biome` | Biome lint | Biome recommended | diagnosticsPer1k×5を減点 |
+| `be_lint_error` | ESLint error | ESLint recommended + security + n | errorsPer1k×10を減点 |
+| `be_lint_warn` | ESLint warn | 同上 | warningsPer1k×3を減点 |
 
 ### コード構造
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-10 | 平均関数長 | カスタムスクリプト | 1000/avgFunctionLength | 10行以下 | 1000行以上 |
-| BE-11 | 平均ファイル長 | カスタムスクリプト | 5000/avgFileLength | 50行以下 | 5000行以上 |
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `be_avg_func_len` | 平均関数長 | score.js内蔵 | 1000/avgFunctionLength |
+| `be_avg_file_len` | 平均ファイル長 | score.js内蔵 | 5000/avgFileLength |
 
-### 認知的複雑度
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-12 | 認知的複雑度 | eslint-plugin-sonarjs | 100 - avg*5 - max超過分*3 | avg≦0, max≦10 | avg≧20 |
-
-### コード重複
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-13 | コード重複率 | jscpd | 100 - percentage*10 | 0% | 10%以上 |
-
-### セキュリティ
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-14 | critical脆弱性/1k行 | Bearer | 100 - criticalPer1k*50 | 0件/1k行 | 2件/1k行以上 |
-| BE-15 | high脆弱性/1k行 | Bearer | 100 - highPer1k*25 | 0件/1k行 | 4件/1k行以上 |
-
-### パフォーマンス
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| BE-16 | p95 latency | k6 | 5000/p95_ms | p95≦50ms | p95≧5000ms |
+### その他
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `be_cognitive` | 認知的複雑度 | eslint-plugin-sonarjs | 100 - avg×5 - max超過分×3 |
+| `be_duplication` | コード重複 | jscpd（リテラル正規化後） | 100 - percentage×5 |
+| `be_security` | セキュリティ | Bearer | critPer1k×50 + highPer1k×25を減点 |
+| `be_perf_get` | GETパフォーマンス | k6 | 5000/p95_ms |
+| `be_perf_post` | POSTパフォーマンス | k6 | 5000/p95_ms |
+| `be_concurrency` | ダブルブッキング防止 | k6（50VU同時POST） | 成功1件=100、2件以上=0 |
 
 ---
 
-## フロントエンド（11項目）
+## フロントエンド（9軸）
+
+### 依存関係
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `fe_dep_violation` | 依存違反 | madge + dependency-cruiser + ADR | 件数×25を減点 |
+
+### 分割度
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `fe_file_count` | ファイル数 | score.js内蔵 | totalFiles/10×100 |
+| `fe_func_count` | 関数数 | score.js内蔵 | totalFunctions/15×100 |
 
 ### 型安全性
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-01 | 型カバレッジ（.tsファイルのみ） | type-coverage | 非線形（二次関数 K=30）。.tsなし→0点 | 100% | .tsファイルなし or 約82%以下 |
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `fe_type_coverage` | 型カバレッジ（.tsのみ） | type-coverage | 非線形K=30。.tsなし=0 |
 
 ### コード品質
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-02 | ESLint error/1k行 | ESLint recommended | 100 - errorsPer1k*10 | 0件/1k行 | 10件/1k行以上 |
-| FE-03 | ESLint warn/1k行 | 同上 | 100 - warningsPer1k*3 | 0件/1k行 | 33件/1k行以上 |
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `fe_biome` | Biome lint | Biome recommended | diagnosticsPer1k×5を減点 |
+| `fe_lint_error` | ESLint error | ESLint recommended | errorsPer1k×10を減点 |
+| `fe_lint_warn` | ESLint warn | 同上 | warningsPer1k×3を減点 |
 
 ### コード構造
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-04 | 平均関数長 | カスタムスクリプト | 1000/avgFunctionLength | 10行以下 | 1000行以上 |
-| FE-05 | 平均ファイル長 | カスタムスクリプト | 5000/avgFileLength | 50行以下 | 5000行以上 |
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `fe_avg_func_len` | 平均関数長 | score.js内蔵 | 1000/avgFunctionLength |
+| `fe_avg_file_len` | 平均ファイル長 | score.js内蔵 | 5000/avgFileLength |
 
-### 認知的複雑度
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-06 | 認知的複雑度 | eslint-plugin-sonarjs | 100 - avg*5 - max超過分*3 | avg≦0, max≦10 | avg≧20 |
-
-### コード重複
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-07 | コード重複率 | jscpd | 100 - percentage*10 | 0% | 10%以上 |
-
-### 依存方向
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-08 | 循環依存数 | madge | 100 - count*15 | 0件 | 7件以上 |
-| FE-09 | 双方向依存数 | dependency-cruiser + ADRパーサー | 100 - count*15 | 0件 | 7件以上 |
-
-### Lighthouse
-| # | 要素 | ツール | 算出方法 | 100点の条件 | 0点の条件 |
-|---|---|---|---|---|---|
-| FE-10 | Lighthouse Performance | Lighthouse CI | スコア値そのまま | 100 | 0 |
-| FE-11 | Lighthouse Accessibility | Lighthouse CI | スコア値そのまま | 100 | 0 |
+### その他
+| ID | 軸 | ツール | 算出方法 |
+|---|---|---|---|
+| `fe_cognitive` | 認知的複雑度 | eslint-plugin-sonarjs | 100 - avg×5 - max超過分×3 |
+| `fe_duplication` | コード重複 | jscpd（リテラル正規化後） | 100 - percentage×5 |
 
 ---
 
 ## AI（サブエージェント）実装のスコア
 
-| # | 要素 | スコア | 差が出るか |
-|---|---|---|---|
-| BE-01 | 循環依存数 | 100 | ✕ シンプルなら違反しない |
-| BE-02 | 双方向依存数 | 100 | ✕ 同上 |
-| BE-03 | 外部依存avgSpread | **80** | ◯ honoがルートハンドラに漏れている |
-| BE-04 | ファイル数 | **25** | ◎ 4ファイルしかない |
-| BE-05 | 関数数 | **23** | ◎ 5関数しかない |
-| BE-06 | 型カバレッジ | **42** | ◎ 86%（DTO未定義、pgのany） |
-| BE-07 | 型lint違反/1k行 | 100 | ✕ |
-| BE-08 | ESLint error/1k行 | 100 | ✕ AIはlint違反を出さない |
-| BE-09 | ESLint warn/1k行 | 100 | ✕ |
-| BE-10 | 平均関数長 | 100 | △ 関数自体は短い |
-| BE-11 | 平均ファイル長 | **74** | ◯ 214行のファイルがある |
-| BE-12 | 認知的複雑度 | **78** | ◯ avg4.3, max8（1関数に集中） |
-| BE-13 | コード重複率 | 100 | ✕ |
-| BE-14 | セキュリティcritical/1k | 100 | ✕ |
-| BE-15 | セキュリティhigh/1k | 100 | ✕ |
-| BE-16 | p95 latency | **51** | ◎ インデックス設計が甘い |
-| FE-01 | 型カバレッジ（.tsのみ） | **0** | ◎ .tsファイルなし（ロジック分離なし） |
-| FE-02 | ESLint error/1k | 100 | ✕ |
-| FE-03 | ESLint warn/1k | 100 | ✕ |
-| FE-04 | 平均関数長 | **16** | ◎ 64行の巨大コンポーネント |
-| FE-05 | 平均ファイル長 | **53** | ◯ 分割不足 |
-| FE-06 | 認知的複雑度 | **73** | ◯ avg5.5, max9（handleSubmitに集中） |
-| FE-07 | コード重複率 | **79** | ◯ 重複コードあり |
-| FE-08 | 循環依存数 | 100 | ✕ |
-| FE-09 | 双方向依存数 | 100 | ✕ |
-| FE-10 | Lighthouse Perf | **99** | ✕ |
-| FE-11 | Lighthouse A11y | 100 | ✕ |
+### バックエンド
 
-### 差が出る要素（◎◯）: 13/27
-### 差が出ない要素（✕△）: 14/27
+| カテゴリ | ID | 軸 | AIスコア | 差が出るか | 理由 |
+|---|---|---|---|---|---|
+| 依存関係 | `be_dep_violation` | 依存違反 | 100 | ✕ | シンプルなら違反しない |
+| 依存関係 | `be_ext_spread` | 外部依存集中度 | **84** | ◯ | honoが2レイヤーに漏れている |
+| 分割度 | `be_file_count` | ファイル数 | **40** | ◎ | 4/10ファイル |
+| 分割度 | `be_func_count` | 関数数 | **33** | ◎ | 5/15関数 |
+| 型安全性 | `be_type_coverage` | 型カバレッジ | **42** | ◎ | 86%（DTO未定義、pgのany） |
+| コード品質 | `be_biome` | Biome lint | **45** | ◎ | noGlobalIsNan、useTemplate等 |
+| コード品質 | `be_lint_error` | ESLint error | 100 | ✕ | AIはESLint違反を出さない |
+| コード品質 | `be_lint_warn` | ESLint warn | 100 | ✕ | 同上 |
+| コード構造 | `be_avg_func_len` | 平均関数長 | 100 | △ | 関数自体は短い（10行） |
+| コード構造 | `be_avg_file_len` | 平均ファイル長 | **74** | ◯ | 214行のファイルがある |
+| その他 | `be_cognitive` | 認知的複雑度 | 100 | △ | 分岐少ない（avg 4.3） |
+| その他 | `be_duplication` | コード重複 | **35** | ◎ | 13%（エラーレスポンス共通化なし） |
+| その他 | `be_security` | セキュリティ | 100 | ✕ | 小コードで検出0 |
+| その他 | `be_perf_get` | GETパフォーマンス | **0** | ◎ | 未計測（要アプリ起動） |
+| その他 | `be_perf_post` | POSTパフォーマンス | **0** | ◎ | 同上 |
+| その他 | `be_concurrency` | ダブルブッキング防止 | **0** | ◎ | 同上 |
 
-### 最終スコア: 68.87/100
+### フロントエンド
+
+| カテゴリ | ID | 軸 | AIスコア | 差が出るか | 理由 |
+|---|---|---|---|---|---|
+| 依存関係 | `fe_dep_violation` | 依存違反 | 100 | ✕ | シンプルなら違反しない |
+| 分割度 | `fe_file_count` | ファイル数 | **40** | ◎ | 4/10ファイル |
+| 分割度 | `fe_func_count` | 関数数 | **20** | ◎ | 3/15関数 |
+| 型安全性 | `fe_type_coverage` | 型カバレッジ | **0** | ◎ | .tsファイルなし |
+| コード品質 | `fe_biome` | Biome lint | **34** | ◎ | useButtonType、useTemplate等 |
+| コード品質 | `fe_lint_error` | ESLint error | 100 | ✕ | AIはESLint違反を出さない |
+| コード品質 | `fe_lint_warn` | ESLint warn | 100 | ✕ | 同上 |
+| コード構造 | `fe_avg_func_len` | 平均関数長 | **16** | ◎ | 64行の巨大コンポーネント |
+| コード構造 | `fe_avg_file_len` | 平均ファイル長 | **53** | ◯ | 分割不足 |
+| その他 | `fe_cognitive` | 認知的複雑度 | 100 | △ | 分岐少ない |
+| その他 | `fe_duplication` | コード重複 | **90** | ◯ | 2%（正規化後） |
+
+### サマリー
+
+- **差が出る軸（◎◯）**: 16/26
+- **差が出ない軸（✕△）**: 10/26
+- **AI最終スコア**: 54.71/100（仮ウェイト。パフォーマンス系3軸が未計測で0点）

@@ -12,9 +12,9 @@ all: e2e-test score-all
 $(REPORTS_DIR):
 	mkdir -p $(REPORTS_DIR)
 
-## 足切り
-e2e-test:
-	@echo "=== E2E Test (pass/fail) ==="
+## 足切り（APIテスト + E2Eテスト）
+gate:
+	@echo "=== Gate: API Test + E2E Test (pass/fail) ==="
 	cd $(SUBMISSION_DIR) && docker compose run --rm tests pnpm test:api
 	cd $(SUBMISSION_DIR) && docker compose run --rm tests pnpm test:e2e
 
@@ -22,7 +22,7 @@ e2e-test:
 seed:
 	@echo "=== Seeding data via k6 (~100k records) ==="
 	chmod 777 $(REPORTS_DIR) 2>/dev/null || true
-	docker run --rm --network=host -e API_URL=http://localhost:3000/api -e SEED_COUNT=100000 \
+	docker run --rm --network=host -e API_URL=http://localhost:3000/api -e SEED_COUNT=500000 \
 		-v $(CURDIR)/tests:/scripts grafana/k6 run /scripts/seed.js 2>&1 || true
 
 ## ============================================================
@@ -36,18 +36,13 @@ arch-test: $(REPORTS_DIR)
 	node scripts/generate-depcruise-config.js $(REPORTS_DIR)/modules-backend.json > $(REPORTS_DIR)/.dependency-cruiser.cjs
 	cd $(BACKEND_SRC) && find src -name '*.ts' | xargs npx --yes dependency-cruiser --config $(CURDIR)/$(REPORTS_DIR)/.dependency-cruiser.cjs --ts-pre-compilation-deps --output-type json > $(CURDIR)/$(REPORTS_DIR)/depcruise-backend.json 2>/dev/null || echo '{"modules":[]}' > $(CURDIR)/$(REPORTS_DIR)/depcruise-backend.json
 	node scripts/calc-arch-violations.js $(REPORTS_DIR)/depcruise-backend.json $(REPORTS_DIR)/modules-backend.json > $(REPORTS_DIR)/adr-deps.json
-	node scripts/calc-external-spread.js $(REPORTS_DIR)/depcruise-backend.json > $(REPORTS_DIR)/external-spread.json
+	node scripts/calc-external-spread.js $(REPORTS_DIR)/depcruise-backend.json $(REPORTS_DIR)/modules-backend.json > $(REPORTS_DIR)/external-spread.json
 
 type-check: $(REPORTS_DIR)
 	@echo "=== Type Safety ==="
-	cd $(BACKEND_SRC) && npx --yes type-coverage --at-least 0 2>&1 | grep -oP '\((\d+) / (\d+)\) ([\d.]+)%' | head -1 | sed 's/(\([0-9]*\) \/ \([0-9]*\)) \([0-9.]*\)%/{"correctCount":\1,"totalCount":\2,"percent":\3}/' > $(CURDIR)/$(REPORTS_DIR)/type-coverage.json || echo '{"percent":0}' > $(REPORTS_DIR)/type-coverage.json
-	npx eslint $(BACKEND_SRC)/src/ --ext .ts \
-		--rule '{"@typescript-eslint/no-explicit-any": "error", "@typescript-eslint/no-unsafe-assignment": "error"}' \
-		-f json -o $(REPORTS_DIR)/type-lint.json 2>/dev/null || echo '[]' > $(REPORTS_DIR)/type-lint.json
-
-lint: $(REPORTS_DIR)
-	@echo "=== Code Quality ==="
-	npx eslint $(BACKEND_SRC)/src/ --ext .ts -f json -o $(REPORTS_DIR)/lint.json 2>/dev/null || echo '[]' > $(REPORTS_DIR)/lint.json
+	cd $(BACKEND_SRC) && npx --yes type-coverage --at-least 0 --ignore-files 'generated/**' --ignore-files '.prisma/**' --ignore-files 'drizzle/**' --ignore-files '**/migrations/**' 2>&1 | grep -oP '\((\d+) / (\d+)\) ([\d.]+)%' | head -1 | sed 's/(\([0-9]*\) \/ \([0-9]*\)) \([0-9.]*\)%/{"correctCount":\1,"totalCount":\2,"percent":\3}/' > $(CURDIR)/$(REPORTS_DIR)/type-coverage.json || echo '{"percent":0}' > $(REPORTS_DIR)/type-coverage.json
+	# Biomeでコードの書き方をチェック
+	npx biome lint $(BACKEND_SRC)/src --config-path $(CURDIR)/configs/biome.json --reporter json 2>/dev/null | grep '^{' | head -1 > $(REPORTS_DIR)/biome-backend.json || echo '{"diagnostics":[]}' > $(REPORTS_DIR)/biome-backend.json
 
 sonarjs-backend: $(REPORTS_DIR)
 	@echo "=== Backend SonarJS ==="
@@ -55,8 +50,12 @@ sonarjs-backend: $(REPORTS_DIR)
 
 duplication-backend: $(REPORTS_DIR)
 	@echo "=== Backend Duplication ==="
-	npx jscpd $(BACKEND_SRC)/src --reporters json --output $(REPORTS_DIR)/jscpd-backend-raw --min-lines 5 --min-tokens 50 2>/dev/null || true
+	# リテラル正規化してからjscpdで構造的重複を検出
+	rm -rf $(REPORTS_DIR)/normalized-backend && mkdir -p $(REPORTS_DIR)/normalized-backend
+	find $(BACKEND_SRC)/src -name '*.ts' -not -path '*/generated/*' -not -path '*/.prisma/*' -not -path '*/drizzle/*' -not -path '*/migrations/*' -not -name '*.d.ts' -exec sh -c 'sed "s/\"[^\"]*\"/\"***\"/g" "$$1" > $(REPORTS_DIR)/normalized-backend/$$(basename "$$1")' _ {} \;
+	npx jscpd $(REPORTS_DIR)/normalized-backend --mode strict --min-lines 3 --min-tokens 30 --reporters json --output $(REPORTS_DIR)/jscpd-backend-raw 2>/dev/null || true
 	cp $(REPORTS_DIR)/jscpd-backend-raw/jscpd-report.json $(REPORTS_DIR)/jscpd-backend.json 2>/dev/null || echo '{"statistics":{"total":{"percentage":"0"}}}' > $(REPORTS_DIR)/jscpd-backend.json
+	rm -rf $(REPORTS_DIR)/normalized-backend
 
 security-test: $(REPORTS_DIR)
 	@echo "=== Security ==="
@@ -65,12 +64,22 @@ security-test: $(REPORTS_DIR)
 	rm -f $(BACKEND_SRC)/.bearer-report.json
 
 load-test: $(REPORTS_DIR)
-	@echo "=== Performance ==="
+	@echo "=== Performance (GET) ==="
 	chmod 777 $(REPORTS_DIR)
 	docker run --rm --network=host -e API_URL=http://localhost:3000/api \
 		-v $(CURDIR)/tests:/scripts -v $(CURDIR)/$(REPORTS_DIR):/reports \
-		grafana/k6 run --summary-export=/reports/perf-summary.json /scripts/load-test.js 2>&1 || true
-	node -e "const d=require('./$(REPORTS_DIR)/perf-summary.json'); console.log(JSON.stringify({metrics:{http_req_duration:d.metrics.http_req_duration}},null,2))" > $(REPORTS_DIR)/perf.json 2>/dev/null || echo '{"metrics":{"http_req_duration":{"p(95)":0}}}' > $(REPORTS_DIR)/perf.json
+		grafana/k6 run --summary-export=/reports/perf-get-summary.json /scripts/load-test-get.js 2>&1 || true
+	node -e "const d=require('./$(REPORTS_DIR)/perf-get-summary.json'); console.log(JSON.stringify({p95:d.metrics.http_req_duration?.['p(95)']||d.metrics.http_req_duration?.values?.['p(95)']||0},null,2))" > $(REPORTS_DIR)/perf-get.json 2>/dev/null || echo '{"p95":0}' > $(REPORTS_DIR)/perf-get.json
+	@echo "=== Performance (POST) ==="
+	docker run --rm --network=host -e API_URL=http://localhost:3000/api \
+		-v $(CURDIR)/tests:/scripts -v $(CURDIR)/$(REPORTS_DIR):/reports \
+		grafana/k6 run --summary-export=/reports/perf-post-summary.json /scripts/load-test-post.js 2>&1 || true
+	node -e "const d=require('./$(REPORTS_DIR)/perf-post-summary.json'); console.log(JSON.stringify({p95:d.metrics.http_req_duration?.['p(95)']||d.metrics.http_req_duration?.values?.['p(95)']||0},null,2))" > $(REPORTS_DIR)/perf-post.json 2>/dev/null || echo '{"p95":0}' > $(REPORTS_DIR)/perf-post.json
+	@echo "=== Concurrency (double booking) ==="
+	docker run --rm --network=host -e API_URL=http://localhost:3000/api \
+		-v $(CURDIR)/tests:/scripts -v $(CURDIR)/$(REPORTS_DIR):/reports \
+		grafana/k6 run --summary-export=/reports/concurrency-summary.json /scripts/concurrency-test.js 2>&1 || true
+	node -e "const d=require('./$(REPORTS_DIR)/concurrency-summary.json'); const s=d.metrics.successful_bookings?.count||d.metrics.successful_bookings?.values?.count||0; console.log(JSON.stringify({successfulBookings:s,isCorrect:s===1},null,2))" > $(REPORTS_DIR)/concurrency.json 2>/dev/null || echo '{"successfulBookings":0,"isCorrect":false}' > $(REPORTS_DIR)/concurrency.json
 
 ## ============================================================
 ## フロントエンド
@@ -91,9 +100,9 @@ frontend-type-check: $(REPORTS_DIR)
 			|| echo '{"percent":0}' > $(REPORTS_DIR)/frontend-type-coverage.json; \
 	fi
 
-frontend-lint: $(REPORTS_DIR)
-	@echo "=== Frontend Code Quality ==="
-	npx eslint $(FRONTEND_SRC)/app/ --ext .ts,.tsx -f json -o $(REPORTS_DIR)/frontend-lint.json 2>/dev/null || echo '[]' > $(REPORTS_DIR)/frontend-lint.json
+frontend-biome: $(REPORTS_DIR)
+	@echo "=== Frontend Code Quality (Biome) ==="
+	npx biome lint $(FRONTEND_SRC)/app --config-path $(CURDIR)/configs/biome.json --reporter json 2>/dev/null | grep '^{' | head -1 > $(REPORTS_DIR)/biome-frontend.json || echo '{"diagnostics":[]}' > $(REPORTS_DIR)/biome-frontend.json
 
 sonarjs-frontend: $(REPORTS_DIR)
 	@echo "=== Frontend SonarJS ==="
@@ -106,27 +115,23 @@ frontend-deps: $(REPORTS_DIR)
 	cd $(FRONTEND_SRC) && find app -name '*.ts' -o -name '*.tsx' | xargs npx --yes dependency-cruiser --config $(CURDIR)/$(REPORTS_DIR)/.dependency-cruiser-frontend.cjs --ts-pre-compilation-deps --output-type json > $(CURDIR)/$(REPORTS_DIR)/depcruise-frontend.json 2>/dev/null || echo '{"modules":[]}' > $(CURDIR)/$(REPORTS_DIR)/depcruise-frontend.json
 	node scripts/calc-arch-violations.js $(REPORTS_DIR)/depcruise-frontend.json $(REPORTS_DIR)/modules-frontend.json > $(REPORTS_DIR)/frontend-deps.json
 	npx madge --circular --json $(FRONTEND_SRC)/app/ > $(REPORTS_DIR)/frontend-circular.json 2>/dev/null || echo "[]" > $(REPORTS_DIR)/frontend-circular.json
+	node scripts/calc-external-spread.js $(REPORTS_DIR)/depcruise-frontend.json $(REPORTS_DIR)/modules-frontend.json > $(REPORTS_DIR)/frontend-external-spread.json
 
 duplication-frontend: $(REPORTS_DIR)
 	@echo "=== Frontend Duplication ==="
-	npx jscpd $(FRONTEND_SRC)/app --reporters json --output $(REPORTS_DIR)/jscpd-frontend-raw --min-lines 5 --min-tokens 50 2>/dev/null || true
+	rm -rf $(REPORTS_DIR)/normalized-frontend && mkdir -p $(REPORTS_DIR)/normalized-frontend
+	find $(FRONTEND_SRC)/app -name '*.ts' -o -name '*.tsx' | while read f; do sed 's/"[^"]*"/"***"/g' "$$f" > $(REPORTS_DIR)/normalized-frontend/$$(basename "$$f"); done
+	npx jscpd $(REPORTS_DIR)/normalized-frontend --mode strict --min-lines 3 --min-tokens 30 --reporters json --output $(REPORTS_DIR)/jscpd-frontend-raw 2>/dev/null || true
 	cp $(REPORTS_DIR)/jscpd-frontend-raw/jscpd-report.json $(REPORTS_DIR)/jscpd-frontend.json 2>/dev/null || echo '{"statistics":{"total":{"percentage":"0"}}}' > $(REPORTS_DIR)/jscpd-frontend.json
+	rm -rf $(REPORTS_DIR)/normalized-frontend
 
-lighthouse: $(REPORTS_DIR)
-	@echo "=== Lighthouse ==="
-	mkdir -p $(REPORTS_DIR)/lighthouse-raw && chmod 777 $(REPORTS_DIR)/lighthouse-raw
-	docker run --rm --network=host \
-		-v $(CURDIR)/$(REPORTS_DIR)/lighthouse-raw:/home/lhci/reports/.lighthouseci \
-		patrickhulce/lhci-client \
-		lhci collect --url=http://localhost:3000/reservations --numberOfRuns=3 \
-		--settings.chromeFlags="--no-sandbox --headless" 2>/dev/null || true
 
 ## ============================================================
 ## 全採点
 ## ============================================================
 
-score-all: arch-test type-check lint sonarjs-backend duplication-backend security-test load-test \
-	frontend-type-check frontend-lint sonarjs-frontend frontend-deps duplication-frontend lighthouse
+score-all: arch-test type-check sonarjs-backend duplication-backend security-test load-test \
+	frontend-type-check frontend-biome sonarjs-frontend frontend-deps duplication-frontend
 	@echo "=== Calculating final score ==="
 	SUBMISSION_DIR=$(SUBMISSION_DIR) node scripts/score.js
 
