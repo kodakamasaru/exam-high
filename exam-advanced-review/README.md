@@ -22,19 +22,34 @@ cd -
 # 2. ゲート条件テスト
 SUBMISSION_DIR=$SUBMISSION_DIR make gate
 
-# 3. シードデータ投入 + 全採点
+# 3. ベースラインテスト（1kシード + GET/POST計測）
+SUBMISSION_DIR=$SUBMISSION_DIR make baseline
+
+# 4. シードデータ投入 + 全採点
 SUBMISSION_DIR=$SUBMISSION_DIR make seed
 SUBMISSION_DIR=$SUBMISSION_DIR make score-all
 
-# 4. 結果確認
-cat reports/score.json
+# 5. 結果確認
+cat reports/score.md
 ```
+
+---
+
+## 判定基準　※仮
+
+| スコア | 判定 | 説明 |
+|---|---|---|
+| 60未満 | **不合格** | コード品質・設計が基準に達していない |
+| 60〜70 | **要確認** | ADR要確認。不十分なら見送り |
+| 70〜80 | **合格** | 責務分離・依存方向・型安全性など、設計判断と実装の両面で自走可能なレベル |
+| 80〜90 | **合格（高評価）** | チーム内でアーキテクチャ設計・コードレビューの中核を担えるレベル |
+| 90以上 | **合格（シニア）** | 技術選定・設計方針の策定をリードできるレベル |
 
 ---
 
 ## スコア算出方法
 
-**BE 145点満点 → 100に正規化、FE 100点満点**
+**BE 130点満点 → 100に正規化、FE 100点満点**
 
 ---
 
@@ -52,22 +67,22 @@ cat reports/score.json
 | 依存違反 | `*_dep_violation` | 9 | 循環依存と双方向依存の大きい方の件数×25を減点 |
 | 認知的複雑度 | `*_cognitive` | 9 | eslint-plugin-sonarjs。avg 1以下=100、3以上=0、線形 |
 
-### BE固有軸（6軸・合計45ポイント）
+### BE固有軸（6軸・各5ポイント・合計30ポイント）
 
 | 軸 | ID | pt | 算出方法 |
 |---|---|---|---|
 | 外部依存集中度 | `be_ext_spread` | 5 | ADR責務単位のavgSpread。(avgSpread-1.0)×200を減点。1.5以上=0 |
 | コード重複 | `be_duplication` | 5 | jscpd（リテラル正規化後）。0%=100、10%以上=0、線形 |
-| GETパフォーマンス | `be_perf_get` | 10 | k6。50万件シード後。10000/p95_ms（100ms以下=100） |
-| POSTパフォーマンス | `be_perf_post` | 10 | k6。30000/p95_ms（300ms以下=100） |
-| ダブルブッキング防止 | `be_concurrency` | 10 | k6。50VU同時POST。成功1件=100、2件以上=0 |
+| GETパフォーマンス | `be_perf_get` | 5 | k6。1k件 vs 50万件のp95比率。ratio 3以下=100、20以上=0、線形 |
+| POSTパフォーマンス | `be_perf_post` | 5 | k6。1k件 vs 50万件のp95比率。ratio 3以下=100、20以上=0、線形 |
+| ダブルブッキング防止 | `be_concurrency` | 5 | k6。50VU同時POST。成功1件=100、2件以上=0 |
 | セキュリティ | `be_security` | 5 | Bearer。critPer1k×50 + highPer1k×25を減点 |
 
 ### 合計
 
 | | ポイント | 正規化 |
 |---|---|---|
-| BE | 共通100 + 固有45 = 145 | → 100点満点 |
+| BE | 共通100 + 固有30 = 130 | → 100点満点 |
 | FE | 共通100 | = 100点満点 |
 
 ---
@@ -111,14 +126,16 @@ score = pct <= 0 ? 100 : pct >= 10 ? 0 : (10 - pct) / 10 * 100
 score = avgSpread <= 1 ? 100 : avgSpread >= 1.5 ? 0 : 100 - (avgSpread - 1) * 200
 ```
 
-### GETパフォーマンス（BE固有）
+### GETパフォーマンス（BE固有。比率ベース）
 ```
-score = clamp(10000 / p95_ms)   // 100ms以下=100
+ratio = p95_500k / p95_1k
+score = ratio <= 3 ? 100 : ratio >= 20 ? 0 : (20 - ratio) / 17 * 100
 ```
 
-### POSTパフォーマンス（BE固有）
+### POSTパフォーマンス（BE固有。比率ベース）
 ```
-score = clamp(30000 / p95_ms)   // 300ms以下=100
+ratio = p95_500k / p95_1k
+score = ratio <= 3 ? 100 : ratio >= 20 ? 0 : (20 - ratio) / 17 * 100
 ```
 
 ---
@@ -127,7 +144,7 @@ score = clamp(30000 / p95_ms)   // 300ms以下=100
 
 以下は全採点軸から除外:
 - ディレクトリ: `node_modules/`, `.next/`, `dist/`, `generated/`, `.prisma/`, `drizzle/`, `migrations/`
-- ファイル: `*.d.ts`, `*.generated.*`
+- ファイル: `*.d.ts`, `*.generated.*`, `.config.*`, `.env*`
 
 ---
 
@@ -142,6 +159,7 @@ score = clamp(30000 / p95_ms)   // 300ms以下=100
 | `sonarjs-backend` | BE認知的複雑度 |
 | `duplication-backend` | BEコード重複（リテラル正規化後） |
 | `security-test` | BEセキュリティ（Bearer） |
+| `baseline` | ベースラインテスト（1kシード + GET/POST計測。seed前に実行） |
 | `load-test` | GETパフォーマンス + POSTパフォーマンス + ダブルブッキング防止 |
 | `frontend-type-check` | FE型カバレッジ（.tsのみ） |
 | `frontend-biome` | FE Biome lint |

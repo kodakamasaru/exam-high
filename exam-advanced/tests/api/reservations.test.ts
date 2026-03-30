@@ -116,6 +116,20 @@ describe("POST /reservations", () => {
     expect(body.error).toBe("validation_error");
   });
 
+  it("endがstartと同じだと400", async () => {
+    const sameTime = futureDateTime(14, 10);
+    const res = await createReservation({
+      resource_id: "room-a",
+      event_name: "開始と終了が同じ",
+      start: sameTime,
+      end: sameTime,
+    });
+    expect(res.status).toBe(400);
+
+    const body = await res.json();
+    expect(body.error).toBe("validation_error");
+  });
+
   it("endがstartより前だと400", async () => {
     const res = await createReservation({
       resource_id: "room-a",
@@ -176,6 +190,34 @@ describe("GET /reservations", () => {
     expect(body.pagination.page).toBeDefined();
     expect(body.pagination.limit).toBeDefined();
     expect(body.pagination.total).toBeDefined();
+  });
+
+  it("start昇順でソートされている", async () => {
+    // 遅い時間 → 早い時間の順に作成
+    await createReservation({
+      resource_id: "room-c",
+      event_name: "ソートテスト後",
+      start: futureDateTime(21, 15),
+      end: futureDateTime(21, 16),
+    });
+    await createReservation({
+      resource_id: "room-c",
+      event_name: "ソートテスト前",
+      start: futureDateTime(21, 10),
+      end: futureDateTime(21, 11),
+    });
+
+    const res = await fetch(
+      `${API_URL}/reservations?resource_id=room-c&from=${futureDateTime(21, 0)}&to=${futureDateTime(22, 0)}`
+    );
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.data.length).toBeGreaterThanOrEqual(2);
+
+    for (let i = 1; i < body.data.length; i++) {
+      expect(body.data[i].start >= body.data[i - 1].start).toBe(true);
+    }
   });
 
   it("resource_idが未指定だと400", async () => {

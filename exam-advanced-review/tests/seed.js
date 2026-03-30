@@ -48,7 +48,7 @@ export const options = {
   thresholds: {},
   noConnectionReuse: false,
   // タイムアウト無制限（EXCLUDE制約等で遅い実装でも確実に投入）
-  duration: "60m",
+  duration: "30m",
 };
 
 export default function () {

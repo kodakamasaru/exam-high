@@ -59,11 +59,24 @@ function parseAdr(filepath) {
   return { modules };
 }
 
+const EMPTY_RESULT = JSON.stringify({ modules: [] }, null, 2);
+
 const filepath = process.argv[2];
 if (!filepath) {
   console.error("Usage: node parse-adr.js <path-to-adr.md>");
   process.exit(1);
 }
 
+if (!fs.existsSync(filepath)) {
+  console.error(`Warning: ADR file not found: ${filepath}`);
+  console.log(EMPTY_RESULT);
+  process.exit(0);
+}
+
 const result = parseAdr(filepath);
+if (result.modules.length === 0) {
+  console.error("Warning: No table found in ADR file");
+  console.log(EMPTY_RESULT);
+  process.exit(0);
+}
 console.log(JSON.stringify(result, null, 2));

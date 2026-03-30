@@ -3,9 +3,9 @@ BACKEND_SRC = $(SUBMISSION_DIR)/backend
 FRONTEND_SRC = $(SUBMISSION_DIR)/frontend
 REPORTS_DIR = reports
 
-.PHONY: all e2e-test seed score-all clean \
+.PHONY: all e2e-test baseline seed score-all clean \
 	arch-test type-check lint duplication-backend security-test load-test sonarjs-backend \
-	frontend-type-check frontend-lint frontend-deps duplication-frontend lighthouse sonarjs-frontend
+	frontend-type-check frontend-deps duplication-frontend sonarjs-frontend
 
 all: e2e-test score-all
 
@@ -18,9 +18,26 @@ gate:
 	cd $(SUBMISSION_DIR) && docker compose run --rm tests pnpm test:api
 	cd $(SUBMISSION_DIR) && docker compose run --rm tests pnpm test:e2e
 
-## シードデータ投入
+## ベースラインテスト（seed前、少量データで実行）
+baseline: $(REPORTS_DIR)
+	@echo "=== Baseline: Seeding 1k records ==="
+	chmod 777 $(REPORTS_DIR) 2>/dev/null || true
+	docker run --rm --network=host -e API_URL=http://localhost:3000/api -e SEED_COUNT=1000 \
+		-v $(CURDIR)/tests:/scripts grafana/k6 run /scripts/seed.js 2>&1 || true
+	@echo "=== Baseline: GET performance ==="
+	docker run --rm --network=host -e API_URL=http://localhost:3000/api \
+		-v $(CURDIR)/tests:/scripts -v $(CURDIR)/$(REPORTS_DIR):/reports \
+		grafana/k6 run --summary-export=/reports/perf-get-baseline-summary.json /scripts/load-test-get.js 2>&1 || true
+	node -e "const d=require('./$(REPORTS_DIR)/perf-get-baseline-summary.json'); console.log(JSON.stringify({p95:d.metrics.http_req_duration?.['p(95)']||d.metrics.http_req_duration?.values?.['p(95)']||0},null,2))" > $(REPORTS_DIR)/perf-get-baseline.json 2>/dev/null || echo '{"p95":0}' > $(REPORTS_DIR)/perf-get-baseline.json
+	@echo "=== Baseline: POST performance ==="
+	docker run --rm --network=host -e API_URL=http://localhost:3000/api \
+		-v $(CURDIR)/tests:/scripts -v $(CURDIR)/$(REPORTS_DIR):/reports \
+		grafana/k6 run --summary-export=/reports/perf-post-baseline-summary.json /scripts/load-test-post.js 2>&1 || true
+	node -e "const d=require('./$(REPORTS_DIR)/perf-post-baseline-summary.json'); console.log(JSON.stringify({p95:d.metrics.http_req_duration?.['p(95)']||d.metrics.http_req_duration?.values?.['p(95)']||0},null,2))" > $(REPORTS_DIR)/perf-post-baseline.json 2>/dev/null || echo '{"p95":0}' > $(REPORTS_DIR)/perf-post-baseline.json
+
+## シードデータ投入（50万件）
 seed:
-	@echo "=== Seeding data via k6 (~100k records) ==="
+	@echo "=== Seeding data via k6 (~500k records) ==="
 	chmod 777 $(REPORTS_DIR) 2>/dev/null || true
 	docker run --rm --network=host -e API_URL=http://localhost:3000/api -e SEED_COUNT=500000 \
 		-v $(CURDIR)/tests:/scripts grafana/k6 run /scripts/seed.js 2>&1 || true
@@ -78,8 +95,8 @@ load-test: $(REPORTS_DIR)
 	@echo "=== Concurrency (double booking) ==="
 	docker run --rm --network=host -e API_URL=http://localhost:3000/api \
 		-v $(CURDIR)/tests:/scripts -v $(CURDIR)/$(REPORTS_DIR):/reports \
-		grafana/k6 run --summary-export=/reports/concurrency-summary.json /scripts/concurrency-test.js 2>&1 || true
-	node -e "const d=require('./$(REPORTS_DIR)/concurrency-summary.json'); const s=d.metrics.successful_bookings?.count||d.metrics.successful_bookings?.values?.count||0; console.log(JSON.stringify({successfulBookings:s,isCorrect:s===1},null,2))" > $(REPORTS_DIR)/concurrency.json 2>/dev/null || echo '{"successfulBookings":0,"isCorrect":false}' > $(REPORTS_DIR)/concurrency.json
+		grafana/k6 run /scripts/concurrency-test.js 2>&1 | tee $(REPORTS_DIR)/concurrency-output.txt || true
+	node -e "const fs=require('fs'); const out=fs.readFileSync('$(REPORTS_DIR)/concurrency-output.txt','utf-8'); const m=out.match(/successful_bookings[.\s]*?:\s*(\d+)/); const s=m?parseInt(m[1]):0; console.log(JSON.stringify({successfulBookings:s,isCorrect:s===1},null,2))" > $(REPORTS_DIR)/concurrency.json 2>/dev/null || echo '{"successfulBookings":0,"isCorrect":false}' > $(REPORTS_DIR)/concurrency.json
 
 ## ============================================================
 ## フロントエンド

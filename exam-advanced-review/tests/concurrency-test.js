@@ -18,14 +18,22 @@ export const options = {
   iterations: 50,  // 50VU × 1回ずつ = 50同時リクエスト
 };
 
+// 実行ごとにユニークな日時を使う（再実行でも衝突しない）
+const RUN_ID = Date.now();
+
 export default function () {
+  // RUN_IDベースでユニークな未来日時を生成（2200年〜）
+  const year = 2200 + Math.floor(RUN_ID % 100);
+  const month = String((RUN_ID % 12) + 1).padStart(2, "0");
+  const day = String((RUN_ID % 28) + 1).padStart(2, "0");
+
   const res = http.post(
     `${API_URL}/reservations`,
     JSON.stringify({
       resource_id: "room-a",
-      event_name: `concurrency-test-vu${__VU}`,
-      start: "2099-12-31T10:00:00",
-      end: "2099-12-31T11:00:00",
+      event_name: `concurrency-test-${RUN_ID}-vu${__VU}`,
+      start: `${year}-${month}-${day}T10:00:00`,
+      end: `${year}-${month}-${day}T11:00:00`,
     }),
     { headers: { "Content-Type": "application/json" } }
   );

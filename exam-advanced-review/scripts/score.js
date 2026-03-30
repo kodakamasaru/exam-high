@@ -23,7 +23,7 @@ const WEIGHTS = {
   //   外部依存集中度: 6, 依存違反: 6,
   //   コード重複: 3, 認知的複雑度: 3
 
-  // --- バックエンド（共通100 + 固有45 = 145 → 100正規化）---
+  // --- バックエンド（共通100 + 固有30 = 130 → 100正規化）---
   // 共通軸
   be_file_count:          20,
   be_type_coverage:       20,
@@ -35,9 +35,9 @@ const WEIGHTS = {
   // BE固有軸（各5）
   be_ext_spread:           5,
   be_duplication:          5,
-  be_perf_get:            10,
-  be_perf_post:           10,
-  be_concurrency:         10,
+  be_perf_get:             5,
+  be_perf_post:            5,
+  be_concurrency:          5,
   be_security:             5,
 
   // --- フロントエンド（共通100）---
@@ -244,13 +244,27 @@ function calcAllScores() {
   // 認知的複雑度: avg 1以下=100, 3以上=0, 線形
   scores.be_cognitive = ccBE.avg <= 1 ? 100 : ccBE.avg >= 3 ? 0 : Math.round((3 - ccBE.avg) / 2 * 100);
 
-  // BE固有: GETパフォーマンス
+  // BE固有: GETパフォーマンス（比率ベース: 1k件 vs 50万件のp95比率）
+  // ratio 3以下=100, 20以上=0, 線形
   const perfGet = readJSON("perf-get.json");
-  scores.be_perf_get = perfGet?.p95 > 0 ? clamp(10000 / perfGet.p95) : 0;
+  const perfGetBaseline = readJSON("perf-get-baseline.json");
+  if (perfGet?.p95 > 0 && perfGetBaseline?.p95 > 0) {
+    const ratio = perfGet.p95 / perfGetBaseline.p95;
+    scores.be_perf_get = ratio <= 3 ? 100 : ratio >= 20 ? 0 : Math.round((20 - ratio) / 17 * 100);
+  } else {
+    scores.be_perf_get = 0;
+  }
 
-  // BE固有: POSTパフォーマンス
+  // BE固有: POSTパフォーマンス（比率ベース: 1k件 vs 50万件のp95比率）
+  // ratio 3以下=100, 20以上=0, 線形
   const perfPost = readJSON("perf-post.json");
-  scores.be_perf_post = perfPost?.p95 > 0 ? clamp(30000 / perfPost.p95) : 0;
+  const perfPostBaseline = readJSON("perf-post-baseline.json");
+  if (perfPost?.p95 > 0 && perfPostBaseline?.p95 > 0) {
+    const ratio = perfPost.p95 / perfPostBaseline.p95;
+    scores.be_perf_post = ratio <= 3 ? 100 : ratio >= 20 ? 0 : Math.round((20 - ratio) / 17 * 100);
+  } else {
+    scores.be_perf_post = 0;
+  }
 
   // BE固有: ダブルブッキング防止
   const cc = readJSON("concurrency.json");
@@ -309,40 +323,77 @@ function calcAllScores() {
 
 const scores = calcAllScores();
 
-console.log("=== All Scores (each /100) ===\n");
-
-// バックエンド
-console.log("Backend:");
 const beKeys = Object.keys(WEIGHTS).filter(k => k.startsWith("be_"));
-for (const k of beKeys) {
-  console.log(`  ${k}: ${Math.round(scores[k])}/100 (weight: ${WEIGHTS[k]})`);
-}
-
-// フロントエンド
-console.log("\nFrontend:");
 const feKeys = Object.keys(WEIGHTS).filter(k => k.startsWith("fe_"));
+
+// BE/FE別の加重合計
+let beWeighted = 0, beTotal = 0, feWeighted = 0, feTotal = 0;
+for (const k of beKeys) { beWeighted += (scores[k] || 0) * WEIGHTS[k]; beTotal += WEIGHTS[k]; }
+for (const k of feKeys) { feWeighted += (scores[k] || 0) * WEIGHTS[k]; feTotal += WEIGHTS[k]; }
+
+const beRaw = Math.round(beWeighted / 100 * 10) / 10;       // 加重得点（130点満点）
+const beNormalized = Math.round(beWeighted / beTotal * 100) / 100; // 100点換算
+const feRaw = Math.round(feWeighted / 100 * 10) / 10;       // 加重得点（100点満点）
+const feNormalized = Math.round(feWeighted / feTotal * 100) / 100; // 100点換算
+const finalScore = Math.round((beNormalized + feNormalized) / 2 * 100) / 100;
+
+// 軸名の表示ラベル
+const LABELS = {
+  file_count: "ファイル数", type_coverage: "型カバレッジ",
+  responsibility_count: "責務数", biome: "Biome lint",
+  file_len: "ファイル長", dep_violation: "依存違反",
+  cognitive: "認知的複雑度", ext_spread: "外部依存集中度",
+  duplication: "コード重複", perf_get: "GETパフォーマンス",
+  perf_post: "POSTパフォーマンス", concurrency: "ダブルブッキング防止",
+  security: "セキュリティ",
+};
+function label(k) { return LABELS[k.replace(/^(be|fe)_/, "")] || k; }
+
+// --- Markdown生成 ---
+const md = [];
+md.push("# 採点結果\n");
+
+md.push("## Backend\n");
+md.push("| 軸 | スコア | ウェイト | 加重点 |");
+md.push("|---|---:|---:|---:|");
+for (const k of beKeys) {
+  const s = Math.round(scores[k] * 10) / 10;
+  const w = WEIGHTS[k];
+  md.push(`| ${label(k)} | ${s} | ${w} | ${Math.round(s * w / 100 * 10) / 10} |`);
+}
+md.push(`| **小計** | | **${beTotal}** | **${beRaw}** |`);
+md.push(`| **100点換算** | | | **${beNormalized}** |`);
+
+md.push("\n## Frontend\n");
+md.push("| 軸 | スコア | ウェイト | 加重点 |");
+md.push("|---|---:|---:|---:|");
 for (const k of feKeys) {
-  console.log(`  ${k}: ${Math.round(scores[k])}/100 (weight: ${WEIGHTS[k]})`);
+  const s = Math.round(scores[k] * 10) / 10;
+  const w = WEIGHTS[k];
+  md.push(`| ${label(k)} | ${s} | ${w} | ${Math.round(s * w / 100 * 10) / 10} |`);
 }
+md.push(`| **小計** | | **${feTotal}** | **${feRaw}** |`);
 
-// 加重平均
-let weightedTotal = 0, totalWeight = 0;
-for (const [k, w] of Object.entries(WEIGHTS)) {
-  weightedTotal += (scores[k] || 0) * w;
-  totalWeight += w;
-}
-const finalScore = Math.round(weightedTotal / totalWeight * 100) / 100;
+md.push("\n## 総合\n");
+md.push("| | 点数 |");
+md.push("|---|---:|");
+md.push(`| BE（${beTotal}点満点） | ${beRaw} |`);
+md.push(`| BE（100点換算） | ${beNormalized} |`);
+md.push(`| FE（100点満点） | ${feNormalized} |`);
+md.push(`| **最終スコア（BE+FE平均）** | **${finalScore}** |`);
 
-console.log(`\n=== Final Score: ${finalScore}/100 ===`);
+const mdText = md.join("\n") + "\n";
+console.log(mdText);
 
+// --- JSON出力 ---
 const result = {
   scores: Object.fromEntries(Object.entries(scores).map(([k, v]) => [k, Math.round(v * 10) / 10])),
   weights: WEIGHTS,
+  be: { raw: beRaw, maxPoints: beTotal, normalized: beNormalized },
+  fe: { raw: feRaw, maxPoints: feTotal, normalized: feNormalized },
   finalScore,
 };
 
-console.log(JSON.stringify(result, null, 2));
-
-const outputPath = path.join(REPORTS_DIR, "score.json");
 fs.mkdirSync(REPORTS_DIR, { recursive: true });
-fs.writeFileSync(outputPath, JSON.stringify(result, null, 2));
+fs.writeFileSync(path.join(REPORTS_DIR, "score.json"), JSON.stringify(result, null, 2));
+fs.writeFileSync(path.join(REPORTS_DIR, "score.md"), mdText);

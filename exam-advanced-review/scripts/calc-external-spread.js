@@ -50,7 +50,7 @@ for (const mod of depcruise.modules || []) {
   const src = mod.source;
   if (!src.startsWith("src/")) continue;
   // エントリポイント（composition root）は除外。全層を知っているのが正しい設計
-  if (src.endsWith("index.ts") || src.endsWith("index.tsx")) continue;
+  if (src.endsWith("index.ts") || src.endsWith("index.tsx") || src.endsWith("main.ts") || src.endsWith("server.ts")) continue;
 
   for (const dep of mod.dependencies || []) {
     const moduleName = dep.module || "";
