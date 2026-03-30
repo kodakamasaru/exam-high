@@ -102,25 +102,25 @@ frontend-type-check: $(REPORTS_DIR)
 
 frontend-biome: $(REPORTS_DIR)
 	@echo "=== Frontend Code Quality (Biome) ==="
-	npx biome lint $(FRONTEND_SRC)/app --config-path $(CURDIR)/configs/biome.json --reporter json 2>/dev/null | grep '^{' | head -1 > $(REPORTS_DIR)/biome-frontend.json || echo '{"diagnostics":[]}' > $(REPORTS_DIR)/biome-frontend.json
+	find $(FRONTEND_SRC) -name '*.ts' -o -name '*.tsx' | grep -v node_modules | grep -v '.next' | grep -v '.config.' | xargs npx biome lint --config-path $(CURDIR)/configs/biome.json --reporter json 2>/dev/null | grep '^{' | head -1 > $(REPORTS_DIR)/biome-frontend.json || echo '{"diagnostics":[]}' > $(REPORTS_DIR)/biome-frontend.json
 
 sonarjs-frontend: $(REPORTS_DIR)
 	@echo "=== Frontend SonarJS ==="
-	node scripts/run-sonarjs.js $(FRONTEND_SRC)/app $(REPORTS_DIR)/sonarjs-frontend.json
+	node scripts/run-sonarjs.js $(FRONTEND_SRC) $(REPORTS_DIR)/sonarjs-frontend.json
 
 frontend-deps: $(REPORTS_DIR)
 	@echo "=== Frontend Dependencies ==="
 	node scripts/parse-adr.js $(SUBMISSION_DIR)/adr/frontend-architecture.md > $(REPORTS_DIR)/modules-frontend.json
 	node scripts/generate-depcruise-config.js $(REPORTS_DIR)/modules-frontend.json > $(REPORTS_DIR)/.dependency-cruiser-frontend.cjs
-	cd $(FRONTEND_SRC) && find app -name '*.ts' -o -name '*.tsx' | xargs npx --yes dependency-cruiser --config $(CURDIR)/$(REPORTS_DIR)/.dependency-cruiser-frontend.cjs --ts-pre-compilation-deps --output-type json > $(CURDIR)/$(REPORTS_DIR)/depcruise-frontend.json 2>/dev/null || echo '{"modules":[]}' > $(CURDIR)/$(REPORTS_DIR)/depcruise-frontend.json
+	cd $(FRONTEND_SRC) && find . -name '*.ts' -o -name '*.tsx' | grep -v node_modules | grep -v .next | xargs npx --yes dependency-cruiser --config $(CURDIR)/$(REPORTS_DIR)/.dependency-cruiser-frontend.cjs --ts-pre-compilation-deps --output-type json > $(CURDIR)/$(REPORTS_DIR)/depcruise-frontend.json 2>/dev/null || echo '{"modules":[]}' > $(CURDIR)/$(REPORTS_DIR)/depcruise-frontend.json
 	node scripts/calc-arch-violations.js $(REPORTS_DIR)/depcruise-frontend.json $(REPORTS_DIR)/modules-frontend.json > $(REPORTS_DIR)/frontend-deps.json
-	npx madge --circular --json $(FRONTEND_SRC)/app/ > $(REPORTS_DIR)/frontend-circular.json 2>/dev/null || echo "[]" > $(REPORTS_DIR)/frontend-circular.json
+	npx madge --circular --json $(FRONTEND_SRC) > $(REPORTS_DIR)/frontend-circular.json 2>/dev/null || echo "[]" > $(REPORTS_DIR)/frontend-circular.json
 	node scripts/calc-external-spread.js $(REPORTS_DIR)/depcruise-frontend.json $(REPORTS_DIR)/modules-frontend.json > $(REPORTS_DIR)/frontend-external-spread.json
 
 duplication-frontend: $(REPORTS_DIR)
 	@echo "=== Frontend Duplication ==="
 	rm -rf $(REPORTS_DIR)/normalized-frontend && mkdir -p $(REPORTS_DIR)/normalized-frontend
-	find $(FRONTEND_SRC)/app -name '*.ts' -o -name '*.tsx' | while read f; do sed 's/"[^"]*"/"***"/g' "$$f" > $(REPORTS_DIR)/normalized-frontend/$$(basename "$$f"); done
+	find $(FRONTEND_SRC) -name '*.ts' -o -name '*.tsx' | grep -v node_modules | grep -v .next | while read f; do sed 's/"[^"]*"/"***"/g' "$$f" > $(REPORTS_DIR)/normalized-frontend/$$(basename "$$f"); done
 	npx jscpd $(REPORTS_DIR)/normalized-frontend --mode strict --min-lines 3 --min-tokens 30 --reporters json --output $(REPORTS_DIR)/jscpd-frontend-raw 2>/dev/null || true
 	cp $(REPORTS_DIR)/jscpd-frontend-raw/jscpd-report.json $(REPORTS_DIR)/jscpd-frontend.json 2>/dev/null || echo '{"statistics":{"total":{"percentage":"0"}}}' > $(REPORTS_DIR)/jscpd-frontend.json
 	rm -rf $(REPORTS_DIR)/normalized-frontend

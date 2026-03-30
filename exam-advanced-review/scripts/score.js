@@ -13,38 +13,41 @@ const REPORTS_DIR = path.join(__dirname, "..", "reports");
 // ============================================================
 // ウェイト（全軸独立。合計の相対比率）
 // ============================================================
+// BE: 共通100 + 固有20 = 120 → 100に正規化
+// FE: 共通100
 const WEIGHTS = {
-  // --- バックエンド ---
-  // アーキテクチャ系
-  be_dep_violation:   0.06,   // 依存違反（循環依存 + 双方向依存の合計）
-  be_ext_spread:      0.04,   // 外部依存集中度
-  be_file_count:      0.04,   // ファイル数（分割度）
-  be_func_count:      0.04,   // 関数数（分割度）
-  // 型安全性系
-  be_type_coverage:   0.10,   // 型カバレッジ
-  // コード品質
-  be_biome:           0.06,   // Biome lint（recommended）
-  // コード構造系
-  be_avg_func_len:    0.04,   // 平均関数長
-  be_avg_file_len:    0.04,   // 平均ファイル長
-  // その他
-  be_cognitive:       0.03,   // 認知的複雑度
-  be_duplication:     0.04,   // コード重複
-  be_security:        0.03,   // セキュリティ
-  be_perf_get:        0.04,   // GETパフォーマンス
-  be_perf_post:       0.04,   // POSTパフォーマンス
-  be_concurrency:     0.04,   // ダブルブッキング防止
+  // --- 共通軸（BE/FE同じポイント） ---
+  // be_* と fe_* で同じ値を使う
+  //   ファイル数: 20, 型カバレッジ: 20,
+  //   責務数: 14, Biome: 14, ファイル長: 14,
+  //   外部依存集中度: 6, 依存違反: 6,
+  //   コード重複: 3, 認知的複雑度: 3
 
-  // --- フロントエンド ---
-  fe_file_count:      0.04,   // ファイル数（分割度）
-  fe_func_count:      0.04,   // 関数数（分割度）
-  fe_type_coverage:   0.06,   // 型カバレッジ（.tsのみ）
-  fe_biome:           0.06,   // Biome lint（recommended）
-  fe_avg_func_len:    0.04,   // 平均関数長
-  fe_avg_file_len:    0.04,   // 平均ファイル長
-  fe_cognitive:       0.03,   // 認知的複雑度
-  fe_duplication:     0.04,   // コード重複
-  fe_dep_violation:   0.04,   // 依存違反（循環依存 + 双方向依存の合計）
+  // --- バックエンド（共通100 + 固有45 = 145 → 100正規化）---
+  // 共通軸
+  be_file_count:          20,
+  be_type_coverage:       20,
+  be_responsibility_count: 14,
+  be_biome:               14,
+  be_file_len:            14,
+  be_dep_violation:        9,
+  be_cognitive:            9,
+  // BE固有軸（各5）
+  be_ext_spread:           5,
+  be_duplication:          5,
+  be_perf_get:            10,
+  be_perf_post:           10,
+  be_concurrency:         10,
+  be_security:             5,
+
+  // --- フロントエンド（共通100）---
+  fe_file_count:          20,
+  fe_type_coverage:       20,
+  fe_responsibility_count: 14,
+  fe_biome:               14,
+  fe_file_len:            14,
+  fe_dep_violation:        9,
+  fe_cognitive:            9,
 };
 
 // ============================================================
@@ -69,15 +72,17 @@ function clamp(value) {
   return Math.max(0, Math.min(100, value));
 }
 
+// 型カバレッジ: 90-100%の線形。90%以下=0点
 function typeCoverageToScore(percent) {
-  const distance = (100 - percent) / 10;
-  return clamp(100 - distance * distance * 30);
+  if (percent >= 100) return 100;
+  if (percent <= 90) return 0;
+  return Math.round((percent - 90) / 10 * 100);
 }
 
 
 // ORM等の自動生成除外
 const IGNORED_DIRS = ["node_modules", ".next", "dist", "generated", ".prisma", "drizzle", "migrations"];
-const IGNORED_FILES = [/\.generated\./, /\.d\.ts$/];
+const IGNORED_FILES = [/\.generated\./, /\.d\.ts$/, /\.config\./, /\.env/];
 function isIgnored(name) { return IGNORED_DIRS.includes(name); }
 function isIgnoredFile(name) { return IGNORED_FILES.some((p) => p.test(name)); }
 
@@ -100,7 +105,7 @@ function countLines(dir, extensions) {
 }
 
 function countFunctions(dir, extensions) {
-  let totalFunctions = 0, totalFunctionLines = 0, totalFileLines = 0, totalFiles = 0;
+  let totalFunctions = 0, totalFunctionLines = 0, totalFileLines = 0, totalFiles = 0, maxFileLength = 0;
   function walk(d) {
     try {
       const entries = fs.readdirSync(d, { withFileTypes: true });
@@ -111,6 +116,7 @@ function countFunctions(dir, extensions) {
           const content = fs.readFileSync(fullPath, "utf-8");
           const lines = content.split("\n");
           totalFileLines += lines.length; totalFiles++;
+          if (lines.length > maxFileLength) maxFileLength = lines.length;
           const funcPatterns = [
             /^(?:export\s+)?(?:async\s+)?function\s+\w+/,
             /^(?:export\s+)?const\s+\w+\s*=\s*(?:async\s+)?\(/,
@@ -135,6 +141,7 @@ function countFunctions(dir, extensions) {
     totalFiles, totalFunctions, totalLines: totalFileLines,
     avgFunctionLength: totalFunctions > 0 ? Math.round(totalFunctionLines / totalFunctions) : 0,
     avgFileLength: totalFiles > 0 ? Math.round(totalFileLines / totalFiles) : 0,
+    maxFileLength,
   };
 }
 
@@ -161,7 +168,7 @@ function extractCognitiveComplexity(data) {
 // ============================================================
 const SUBMISSION_DIR = process.env.SUBMISSION_DIR || path.join(__dirname, "..", "..", "exam-advanced");
 const BACKEND_SRC = path.join(SUBMISSION_DIR, "backend", "src");
-const FRONTEND_APP = path.join(SUBMISSION_DIR, "frontend", "app");
+const FRONTEND_APP = path.join(SUBMISSION_DIR, "frontend");
 
 // ============================================================
 // 全軸スコア算出（各100点満点）
@@ -174,52 +181,82 @@ function calcAllScores() {
   const feStruct = countFunctions(FRONTEND_APP, [".ts", ".tsx"]);
   const feLines = countLines(FRONTEND_APP, [".ts", ".tsx"]);
 
+  // --- 共通スコア算出関数 ---
+  function fileCountScore(n) {
+    if (n <= 5) return 0;
+    if (n >= 15) return 100;
+    return Math.round((n - 5) / 10 * 100);
+  }
+  function responsibilityCountScore(n) {
+    if (n <= 2) return 0;
+    if (n >= 7) return 100;
+    return Math.round((n - 2) / 5 * 100);
+  }
+  function fileLenScore(avg, max) {
+    // 平均: 30以下=100, 80以上=0
+    const avgS = avg <= 30 ? 100 : avg >= 80 ? 0 : Math.round((80 - avg) / 50 * 100);
+    // 最大: 70以下=100, 120以上=0
+    const maxS = max <= 70 ? 100 : max >= 120 ? 0 : Math.round((120 - max) / 50 * 100);
+    return Math.min(avgS, maxS);
+  }
+
   // --- バックエンド ---
 
-  // 依存違反（循環依存 + 双方向依存。重複検出は大きい方で取る）
-  const circular = readJSON("circular.json");
-  const circularCount = circular && Array.isArray(circular) ? circular.length : 0;
-  const adrDeps = readJSON("adr-deps.json");
-  const bidirectionalCount = adrDeps?.bidirectionalCount || 0;
-  const depViolations = Math.max(circularCount, bidirectionalCount);
-  scores.be_dep_violation = clamp(100 - depViolations * 25);
+  // ファイル数（5以下=0、5-15線形、15+=100）
+  scores.be_file_count = fileCountScore(beStruct.totalFiles);
 
-  // 外部依存集中度
-  const spread = readJSON("external-spread.json");
-  // モジュール単位のspread。1.0=100, 2.0=50, 3.0=0
-  scores.be_ext_spread = spread ? clamp(100 - (spread.avgSpread - 1.0) * 50) : 100;
-
-  // ファイル数
-  scores.be_file_count = clamp(beStruct.totalFiles / 10 * 100);
-
-  // 関数数
-  scores.be_func_count = clamp(beStruct.totalFunctions / 15 * 100);
-
-  // 型カバレッジ
+  // 型カバレッジ（非線形K=50）
   const typeCov = readJSON("type-coverage.json");
   scores.be_type_coverage = typeCov?.percent != null ? typeCoverageToScore(typeCov.percent) : 0;
 
-  // Biome lint
+  // 責務数（ADRテーブル行数。2以下=0、3-7線形）
+  const beModules = readJSON("modules-backend.json");
+  scores.be_responsibility_count = responsibilityCountScore(beModules?.modules?.length || 0);
+
+  // Biome lint（1k行あたり違反数）
   const biomeBE = readJSON("biome-backend.json");
   const biomeBECount = biomeBE?.diagnostics?.length || 0;
   const biomeBEPer1k = beLines > 0 ? (biomeBECount / beLines) * 1000 : 0;
   scores.be_biome = clamp(100 - biomeBEPer1k * 5);
 
-  // 平均関数長
-  scores.be_avg_func_len = beStruct.avgFunctionLength > 0 ? clamp(1000 / beStruct.avgFunctionLength) : 100;
+  // ファイル長（min(平均スコア, 最大スコア)）
+  scores.be_file_len = fileLenScore(beStruct.avgFileLength, beStruct.maxFileLength || beStruct.avgFileLength);
 
-  // 平均ファイル長
-  scores.be_avg_file_len = beStruct.avgFileLength > 0 ? clamp(5000 / beStruct.avgFileLength) : 100;
+  // 外部依存集中度（責務単位のavgSpread）
+  const spread = readJSON("external-spread.json");
+  scores.be_ext_spread = spread ? clamp(100 - (spread.avgSpread - 1.0) * 200) : 100;
+
+  // 依存違反（循環依存 + 双方向依存の大きい方）
+  const circular = readJSON("circular.json");
+  const circularCount = circular && Array.isArray(circular) ? circular.length : 0;
+  const adrDeps = readJSON("adr-deps.json");
+  const bidirectionalCount = adrDeps?.bidirectionalCount || 0;
+  scores.be_dep_violation = clamp(100 - Math.max(circularCount, bidirectionalCount) * 25);
+
+  // コード重複（リテラル正規化後jscpd）
+  const jscpdBE = readJSON("jscpd-backend.json");
+  // コード重複: 0%=100, 10%以上=0, 線形
+  const beDupPct = jscpdBE?.statistics?.total ? parseFloat(jscpdBE.statistics.total.percentage) : 0;
+  scores.be_duplication = beDupPct <= 0 ? 100 : beDupPct >= 10 ? 0 : Math.round((10 - beDupPct) / 10 * 100);
 
   // 認知的複雑度
   const ccBE = extractCognitiveComplexity(readJSON("sonarjs-backend.json"));
-  scores.be_cognitive = clamp(100 - ccBE.avg * 5 - (ccBE.max > 10 ? (ccBE.max - 10) * 3 : 0));
+  // 認知的複雑度: avg 1以下=100, 3以上=0, 線形
+  scores.be_cognitive = ccBE.avg <= 1 ? 100 : ccBE.avg >= 3 ? 0 : Math.round((3 - ccBE.avg) / 2 * 100);
 
-  // コード重複
-  const jscpdBE = readJSON("jscpd-backend.json");
-  scores.be_duplication = jscpdBE?.statistics?.total ? clamp(100 - parseFloat(jscpdBE.statistics.total.percentage) * 5) : 100;
+  // BE固有: GETパフォーマンス
+  const perfGet = readJSON("perf-get.json");
+  scores.be_perf_get = perfGet?.p95 > 0 ? clamp(10000 / perfGet.p95) : 0;
 
-  // セキュリティ
+  // BE固有: POSTパフォーマンス
+  const perfPost = readJSON("perf-post.json");
+  scores.be_perf_post = perfPost?.p95 > 0 ? clamp(30000 / perfPost.p95) : 0;
+
+  // BE固有: ダブルブッキング防止
+  const cc = readJSON("concurrency.json");
+  scores.be_concurrency = cc?.isCorrect ? 100 : 0;
+
+  // BE固有: セキュリティ
   const security = readJSON("security.json");
   if (security?.findings && beLines > 0) {
     let crit = 0, high = 0;
@@ -229,29 +266,18 @@ function calcAllScores() {
     scores.be_security = 100;
   }
 
-  // GETパフォーマンス
-  const perfGet = readJSON("perf-get.json");
-  scores.be_perf_get = perfGet?.p95 > 0 ? clamp(5000 / perfGet.p95) : 0;
-
-  // POSTパフォーマンス
-  const perfPost = readJSON("perf-post.json");
-  scores.be_perf_post = perfPost?.p95 > 0 ? clamp(5000 / perfPost.p95) : 0;
-
-  // ダブルブッキング防止
-  const cc = readJSON("concurrency.json");
-  scores.be_concurrency = cc?.isCorrect ? 100 : 0;
-
   // --- フロントエンド ---
 
   // ファイル数
-  scores.fe_file_count = clamp(feStruct.totalFiles / 10 * 100);
-
-  // 関数数
-  scores.fe_func_count = clamp(feStruct.totalFunctions / 15 * 100);
+  scores.fe_file_count = fileCountScore(feStruct.totalFiles);
 
   // 型カバレッジ（.tsのみ）
   const feTypeCov = readJSON("frontend-type-coverage.json");
   scores.fe_type_coverage = feTypeCov?.percent != null && feTypeCov.percent > 0 ? typeCoverageToScore(feTypeCov.percent) : 0;
+
+  // 責務数
+  const feModules = readJSON("modules-frontend.json");
+  scores.fe_responsibility_count = responsibilityCountScore(feModules?.modules?.length || 0);
 
   // Biome lint
   const biomeFE = readJSON("biome-frontend.json");
@@ -259,30 +285,20 @@ function calcAllScores() {
   const biomeFEPer1k = feLines > 0 ? (biomeFECount / feLines) * 1000 : 0;
   scores.fe_biome = clamp(100 - biomeFEPer1k * 5);
 
-  // 平均関数長
-  scores.fe_avg_func_len = feStruct.avgFunctionLength > 0 ? clamp(1000 / feStruct.avgFunctionLength) : 100;
+  // ファイル長
+  scores.fe_file_len = fileLenScore(feStruct.avgFileLength, feStruct.maxFileLength || feStruct.avgFileLength);
 
-  // 平均ファイル長
-  scores.fe_avg_file_len = feStruct.avgFileLength > 0 ? clamp(5000 / feStruct.avgFileLength) : 100;
-
-  // 認知的複雑度
-  const ccFE = extractCognitiveComplexity(readJSON("sonarjs-frontend.json"));
-  scores.fe_cognitive = clamp(100 - ccFE.avg * 5 - (ccFE.max > 10 ? (ccFE.max - 10) * 3 : 0));
-
-  // コード重複
-  const jscpdFE = readJSON("jscpd-frontend.json");
-  scores.fe_duplication = jscpdFE?.statistics?.total ? clamp(100 - parseFloat(jscpdFE.statistics.total.percentage) * 5) : 100;
-
-  // 外部依存集中度
-  const feSpread = readJSON("frontend-external-spread.json");
-  scores.fe_ext_spread = feSpread ? clamp(100 - (feSpread.avgSpread - 1.0) * 50) : 100;
-
-  // 依存違反（循環依存 + 双方向依存）
+  // 依存違反
   const feCircular = readJSON("frontend-circular.json");
   const feCircularCount = feCircular && Array.isArray(feCircular) ? feCircular.length : 0;
   const feDeps = readJSON("frontend-deps.json");
   const feBidirectionalCount = feDeps?.bidirectionalCount || 0;
   scores.fe_dep_violation = clamp(100 - Math.max(feCircularCount, feBidirectionalCount) * 25);
+
+  // 認知的複雑度
+  const ccFE = extractCognitiveComplexity(readJSON("sonarjs-frontend.json"));
+  // 認知的複雑度: avg 1以下=100, 3以上=0, 線形
+  scores.fe_cognitive = ccFE.avg <= 1 ? 100 : ccFE.avg >= 3 ? 0 : Math.round((3 - ccFE.avg) / 2 * 100);
 
   return scores;
 }

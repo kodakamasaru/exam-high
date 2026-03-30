@@ -1,11 +1,11 @@
 /**
- * ADRからパースしたモジュール定義を元に、dependency-cruiser設定を生成する。
+ * ADRからパースした責務定義を元に、dependency-cruiser設定を生成する。
  *
  * Usage: node generate-depcruise-config.js <modules.json>
  * Output: dependency-cruiser設定（JS）を stdout に出力
  *
  * modules.json の形式:
- * { "modules": [{ "name": "domain", "path": "src/domain/" }, ...] }
+ * { "modules": [{ "name": "controller", "path": "src/controller/" }, ...] }
  */
 
 const fs = require("fs");
@@ -18,18 +18,7 @@ if (!modulesFile) {
 
 const { modules } = JSON.parse(fs.readFileSync(modulesFile, "utf-8"));
 
-// 各モジュールのパスパターンを生成
 const forbidden = [];
-
-// モジュール間の双方向依存を検出するルールを生成
-// 全ペアについて A→B と B→A の両方を検出
-for (let i = 0; i < modules.length; i++) {
-  for (let j = i + 1; j < modules.length; j++) {
-    const a = modules[i];
-    const b = modules[j];
-    // 個別のルールではなく、後で集計スクリプトで双方向を検出する
-  }
-}
 
 // 循環依存の検出
 forbidden.push({

@@ -1,18 +1,12 @@
 /**
- * ADR-000のDirectory Structureテーブルをパースし、モジュール定義を抽出する。
+ * ADRのmarkdownテーブルをパースし、責務定義を抽出する。
+ * 最初に見つかったテーブルを使用。
  *
- * Usage: node parse-adr.js <path-to-000-architecture.md>
+ * Usage: node parse-adr.js <path-to-adr.md>
  * Output: JSON to stdout
- *
- * 期待するADRフォーマット:
- * | モジュール名 | パス | 責務 |
- * |---|---|---|
- * | domain | src/domain/ | ビジネスロジック |
- * | ...    | ...         | ...             |
  */
 
 const fs = require("fs");
-const path = require("path");
 
 function parseAdr(filepath) {
   const content = fs.readFileSync(filepath, "utf-8");
@@ -25,19 +19,19 @@ function parseAdr(filepath) {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Directory Structureセクション内のテーブルを探す
-    if (trimmed.startsWith("| モジュール名") || trimmed.startsWith("| レイヤー名")) {
+    // テーブルヘッダー行（| で始まる最初の行）
+    if (!inTable && trimmed.startsWith("|") && trimmed.endsWith("|")) {
       inTable = true;
       continue;
     }
 
     // セパレータ行をスキップ
-    if (inTable && trimmed.match(/^\|[\s-|]+\|$/)) {
+    if (inTable && !headerPassed && trimmed.match(/^\|[\s-|]+\|$/)) {
       headerPassed = true;
       continue;
     }
 
-    // テーブル行をパース
+    // テーブルデータ行をパース
     if (inTable && headerPassed && trimmed.startsWith("|")) {
       const cells = trimmed
         .split("|")
@@ -46,8 +40,7 @@ function parseAdr(filepath) {
 
       if (cells.length >= 3) {
         const [name, modulePath, responsibility] = cells;
-        // テンプレートの例示行やヘッダーをスキップ
-        if (name && modulePath && !name.startsWith("（") && !name.startsWith("例")) {
+        if (name && modulePath && !name.startsWith("（")) {
           modules.push({
             name,
             path: modulePath.replace(/`/g, "").trim(),
@@ -66,10 +59,9 @@ function parseAdr(filepath) {
   return { modules };
 }
 
-// CLI
 const filepath = process.argv[2];
 if (!filepath) {
-  console.error("Usage: node parse-adr.js <path-to-000-architecture.md>");
+  console.error("Usage: node parse-adr.js <path-to-adr.md>");
   process.exit(1);
 }
 

@@ -1,9 +1,9 @@
 /**
- * dependency-cruiserの出力とADRモジュール定義から、
- * 外部パッケージのモジュール単位でのspreadを算出する。
+ * dependency-cruiserの出力とADR責務定義から、
+ * 外部パッケージの責務単位でのspreadを算出する。
  *
- * 「honoが3ファイルからimportされているが全部presentation層」→ spread=1（OK）
- * 「honoがpresentation層とservice層からimport」→ spread=2（レイヤー漏れ）
+ * 「honoが3ファイルからimportされているが全部controller責務」→ spread=1（OK）
+ * 「honoがcontroller責務とservice責務からimport」→ spread=2（責務漏れ）
  *
  * Usage: node calc-external-spread.js <depcruise-output.json> [modules.json]
  * Output: JSON to stdout
@@ -21,34 +21,36 @@ if (!depcruiseFile) {
 
 const depcruise = JSON.parse(fs.readFileSync(depcruiseFile, "utf-8"));
 
-// モジュール定義がある場合はモジュール単位、なければファイル単位
-let modules = null;
+// 責務定義がある場合は責務単位、なければファイル単位
+let responsibilities = null;
 if (modulesFile && fs.existsSync(modulesFile)) {
   try {
-    modules = JSON.parse(fs.readFileSync(modulesFile, "utf-8")).modules;
+    responsibilities = JSON.parse(fs.readFileSync(modulesFile, "utf-8")).modules;
   } catch {}
 }
 
-function resolveModule(filePath) {
-  if (!modules) return filePath;
-  for (const mod of modules) {
-    const modPath = mod.path.replace(/\/$/, "");
-    if (modPath.includes("*")) {
-      const suffix = modPath.replace(/^\*+\/?\*?/, "");
-      if (filePath.endsWith(suffix)) return mod.name;
+function resolveResponsibility(filePath) {
+  if (!responsibilities) return filePath;
+  for (const resp of responsibilities) {
+    const respPath = resp.path.replace(/\/$/, "");
+    if (respPath.includes("*")) {
+      const suffix = respPath.replace(/^\*+\/?\*?/, "");
+      if (filePath.endsWith(suffix)) return resp.name;
     } else {
-      if (filePath.startsWith(modPath)) return mod.name;
+      if (filePath.startsWith(respPath)) return resp.name;
     }
   }
   return filePath;
 }
 
-// パッケージごとにimport元のモジュール（or ファイル）を集計
+// パッケージごとにimport元の責務（or ファイル）を集計
 const extMap = new Map();
 
 for (const mod of depcruise.modules || []) {
   const src = mod.source;
   if (!src.startsWith("src/")) continue;
+  // エントリポイント（composition root）は除外。全層を知っているのが正しい設計
+  if (src.endsWith("index.ts") || src.endsWith("index.tsx")) continue;
 
   for (const dep of mod.dependencies || []) {
     const moduleName = dep.module || "";
@@ -59,7 +61,7 @@ for (const mod of depcruise.modules || []) {
         : parts[0];
 
       if (!extMap.has(pkg)) extMap.set(pkg, new Set());
-      extMap.get(pkg).add(resolveModule(src));
+      extMap.get(pkg).add(resolveResponsibility(src));
     }
   }
 }
@@ -86,7 +88,7 @@ const maxSpread = packageCount > 0
   : 0;
 
 const result = {
-  mode: modules ? "module" : "file",
+  mode: responsibilities ? "responsibility" : "file",
   perPackage,
   avgSpread,
   maxSpread,
